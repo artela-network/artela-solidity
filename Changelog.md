@@ -4,6 +4,7 @@ Language Features:
 
 
 Compiler Features:
+ * Code Generator: Remove redundant overflow checks in specific for loops.
  * Commandline Interface: Return exit code ``2`` on uncaught exceptions.
  * Commandline Interface: Add `--no-cbor-metadata` that skips CBOR metadata from getting appended at the end of the bytecode.
  * Natspec: Add event Natspec inheritance for devdoc.
