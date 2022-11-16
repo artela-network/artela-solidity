@@ -294,11 +294,11 @@ contract Test {
 // f() -> true
 // g() -> true
 // pair() -> true
-// gas irOptimized: 270080
-// gas legacy: 275952
-// gas legacyOptimized: 267239
+// gas irOptimized: 269860
+// gas legacy: 275472
+// gas legacyOptimized: 266967
 // verifyTx() -> true
 // ~ emit Verified(string): 0x20, 0x16, "Successfully verified."
-// gas irOptimized: 784027
-// gas legacy: 805423
-// gas legacyOptimized: 772571
+// gas irOptimized: 782872
+// gas legacy: 802903
+// gas legacyOptimized: 771143
