@@ -31,6 +31,8 @@
 #include <libevmasm/ConstantOptimiser.h>
 #include <libevmasm/GasMeter.h>
 
+#include <libsolutil/JSON.h>
+
 #include <liblangutil/CharStream.h>
 #include <liblangutil/Exceptions.h>
 
@@ -344,6 +346,7 @@ map<u256, u256> const& Assembly::optimiseInternal(
 	std::set<size_t> _tagsReferencedFromOutside
 )
 {
+	Json::Value blockTrace(Json::ValueType::arrayValue);
 	if (m_tagReplacements)
 		return *m_tagReplacements;
 
@@ -456,6 +459,22 @@ map<u256, u256> const& Assembly::optimiseInternal(
 
 				if (shouldReplace)
 				{
+					{
+						Json::Value blockOptimationTrace(Json::ValueType::objectValue);
+						blockOptimationTrace["kind"] = "cse";
+						{
+							Assembly origBlock(m_creation, m_name);
+							origBlock.m_items.assign(orig, iter);
+							blockOptimationTrace["pre"] = origBlock.assemblyJSON({}, false);
+						}
+						{
+							Assembly optimizedBlock(m_creation, m_name);
+							optimizedBlock.m_items.assign(optimisedChunk.begin(), optimisedChunk.end());
+							blockOptimationTrace["post"] = optimizedBlock.assemblyJSON({}, false);
+						}
+						blockTrace.append(blockOptimationTrace);
+					}
+
 					count++;
 					optimisedItems += optimisedChunk;
 				}
@@ -477,6 +496,12 @@ map<u256, u256> const& Assembly::optimiseInternal(
 			_settings.evmVersion,
 			*this
 		);
+
+	for (auto const& trace: blockTrace)
+	{
+		std::ofstream output("/tmp/blockTrace.json", std::ios_base::app|std::ios_base::out);
+		output << jsonPrint(trace, JsonFormat{JsonFormat::Pretty}) << "," << std::endl;
+	}
 
 	m_tagReplacements = std::move(tagReplacements);
 	return *m_tagReplacements;
