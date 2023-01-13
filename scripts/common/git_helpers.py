@@ -10,10 +10,11 @@ def run_git_command(command):
     )
     return process.stdout.strip()
 
+def git(commands: str):
+    return run_git_command(["git"] + commands.split())
 
 def git_current_branch():
-    return run_git_command(['git', 'symbolic-ref', 'HEAD', '--short'])
-
+    return git("symbolic-ref HEAD --short")
 
 def git_commit_hash(ref: str = 'HEAD'):
-    return run_git_command(['git', 'rev-parse', '--verify', ref])
+    return git(f"rev-parse --verify {ref}")
