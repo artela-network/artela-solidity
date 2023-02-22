@@ -7,6 +7,7 @@ Compiler Features:
  * Assembler: Use ``push0`` for placing ``0`` in the stack for EVM versions starting from "Shanghai". This decreases the deployment and runtime costs.
  * EVM: Set default EVM version to "Shanghai".
  * EVM: Support for the EVM Version "Shanghai".
+ * EWasm: Remove EWasm backend.
  * NatSpec: Add support for NatSpec documentation in ``enum`` definitions.
  * NatSpec: Add support for NatSpec documentation in ``struct`` definitions.
  * NatSpec: Include NatSpec from events that are emitted by a contract but defined outside of it in userdoc and devdoc output.
