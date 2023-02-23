@@ -638,7 +638,7 @@ void CommandLineInterface::processInput()
 		serveLSP();
 		break;
 	case InputMode::Assembler:
-		assembleYul(m_options.assembly.inputLanguage, m_options.assembly.targetMachine);
+		assembleYul(m_options.assembly.inputLanguage);
 		break;
 	case InputMode::Linker:
 		link();
@@ -1009,7 +1009,7 @@ string CommandLineInterface::objectWithLinkRefsHex(evmasm::LinkerObject const& _
 	return out;
 }
 
-void CommandLineInterface::assembleYul(yul::YulStack::Language _language, yul::YulStack::Machine _targetMachine)
+void CommandLineInterface::assembleYul(yul::YulStack::Language _language)
 {
 	solAssert(m_options.input.mode == InputMode::Assembler);
 
@@ -1058,7 +1058,6 @@ void CommandLineInterface::assembleYul(yul::YulStack::Language _language, yul::Y
 
 	for (auto const& src: m_fileReader.sourceUnits())
 	{
-		solAssert(_targetMachine == yul::YulStack::Machine::EVM);
 		string machine = "EVM";
 		sout() << endl << "======= " << src.first << " (" << machine << ") =======" << endl;
 
@@ -1073,7 +1072,7 @@ void CommandLineInterface::assembleYul(yul::YulStack::Language _language, yul::Y
 		}
 
 		yul::MachineAssemblyObject object;
-		object = stack.assemble(_targetMachine);
+		object = stack.assemble();
 		object.bytecode->link(m_options.linker.libraries);
 
 		if (m_options.compiler.outputs.binary)
@@ -1085,7 +1084,6 @@ void CommandLineInterface::assembleYul(yul::YulStack::Language _language, yul::Y
 				serr() << "No binary representation found." << endl;
 		}
 
-		solAssert(_targetMachine == yul::YulStack::Machine::EVM, "");
 		if (m_options.compiler.outputs.asm_)
 		{
 			sout() << endl << "Text representation:" << endl;
