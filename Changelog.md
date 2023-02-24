@@ -1,6 +1,7 @@
 ## 0.8.20 (unreleased)
 
 Language Features:
+ * General: Introduce literal suffix functions. Free functions can now be marked as suffixes and applied to literals using a new suffix call syntax.
 
 
 Compiler Features:
@@ -23,6 +24,8 @@ Bugfixes:
 
 
 AST Changes:
+ * AST: Add ``isSuffixCall`` field to ``FunctionCall`` AST node, which is ``true`` for calls resulting from applying a literal suffix.
+ * AST: Add ``suffix`` field to ``FunctionDefinition`` AST node, which is ``true`` for free function definitions using the ``suffix`` modifier.
  * AST: add the ``internalFunctionID`` field to the AST nodes of functions that may be called via the internal dispatch. These IDs are always generated, but they are only used in via-IR code generation.
 
 
