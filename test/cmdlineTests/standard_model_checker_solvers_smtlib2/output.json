@@ -3,7 +3,8 @@
     {
         "smtlib2queries":
         {
-            "0x75b95497d56c30e254a59358d72ddd4e78f9e90db621cfe677e85d05b2252411": "(set-option :produce-models true)
+            "0x1709577b0e186388ed08c2cf085f20c115c4c94745fb102c5be552ff2e4c7028": "(set-option :produce-models true)
+(set-option :timeout 1000)
 (set-logic ALL)
 (declare-fun |x_3_3| () Int)
 (declare-fun |error_0| () Int)
@@ -30,7 +31,8 @@
 (check-sat)
 (get-value (|EVALEXPR_0| ))
 ",
-            "0xfb06d3f02a20bd362abded9ab80638bdc9dd43ccbf644517f3006206c0c47f67": "(set-logic HORN)
+            "0xe623415f1ac562490fbd4287bf7fbd54b6282aa9bca3e17cf6781061e70af26a": "(set-option :timeout 1000)
+(set-logic HORN)
 
 (declare-datatypes ((|bytes_tuple| 0)) (((|bytes_tuple| (|bytes_tuple_accessor_array| (Array Int Int)) (|bytes_tuple_accessor_length| Int)))))
 (declare-datatypes ((|tx_type| 0)) (((|tx_type| (|block.basefee| Int) (|block.chainid| Int) (|block.coinbase| Int) (|block.gaslimit| Int) (|block.number| Int) (|block.prevrandao| Int) (|block.timestamp| Int) (|blockhash| (Array Int Int)) (|msg.data| |bytes_tuple|) (|msg.sender| Int) (|msg.sig| Int) (|msg.value| Int) (|tx.gasprice| Int) (|tx.origin| Int)))))
