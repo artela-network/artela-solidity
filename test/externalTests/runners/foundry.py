@@ -57,9 +57,7 @@ class FoundryRunner(TestRunner):
         yul = ${yul}
     """
     )
-
-    foundryup_url = "https://raw.githubusercontent.com/foundry-rs/foundry/master/foundryup/foundryup"
-    foundry_repo = "https://github.com/foundry-rs/foundry.git"
+    foundry_config_file = "foundry.toml"
 
     def __init__(
         self, config: TestConfig, setup_fn=None, compile_fn=None, test_fn=None
@@ -72,37 +70,13 @@ class FoundryRunner(TestRunner):
         # Note: the test_dir will be set on setup_environment
         self.test_dir: Path = None
 
-    def setup_environment(self, test_dir: Path, from_src: bool = False):
+    def setup_environment(self, test_dir: Path):
         """Configure the project build environment"""
 
-        self.test_dir = test_dir
-        os.chdir(test_dir)
-
         print("Configuring Foundry building environment...")
+        self.test_dir = test_dir
         if which("forge") is None:
-            if not which("cargo"):
-                raise RuntimeError("Cargo not found.")
-            foundry_dir = test_dir / "foundry"
-            foundry_bin_dir = foundry_dir / "bin"
-            foundry_bin_dir.mkdir(parents=True, exist_ok=True)
-            self.env.update({"FOUNDRY_DIR": foundry_dir.resolve()})
-            if from_src:
-                ExternalTest.download_project(foundry_dir, self.foundry_repo, "branch", "master")
-                os.chdir(foundry_dir)
-                run_cmd(f"cargo install --path {foundry_dir.resolve()}/cli --profile local --bins --locked --force")
-            else :
-                # Create the man directory required for the foundryup script
-                foundry_man_dir = foundry_dir / "share/man/man1"
-                foundry_man_dir.mkdir(parents=True, exist_ok=True)
-                req = requests.get(self.foundryup_url, stream=True, verify=True, timeout=10)
-                foundryup_bin = test_dir / "foundryup"
-                with open(foundryup_bin, 'wb') as f:
-                    for chunk in req.iter_content(chunk_size=512):
-                        f.write(chunk)
-                run_cmd(f"chmod +x {foundryup_bin.resolve()}")
-                run_cmd(f"{foundryup_bin.resolve()}", self.env)
-            if not any(path == foundry_bin_dir for path in self.env["PATH"].split(os.pathsep)):
-                self.env["PATH"] += os.pathsep + str(foundry_bin_dir.resolve())
+            raise RuntimeError("Forge not found.")
         if self.setup_fn:
             self.setup_fn(self.test_dir, self.env)
 
@@ -123,7 +97,6 @@ class FoundryRunner(TestRunner):
     ):
         """Configure forge tests profiles"""
 
-        foundry_config_file = self.config.config_file
         binary_type = self.config.solc.binary_type
         binary_path = self.config.solc.binary_path
         print(
@@ -131,22 +104,22 @@ class FoundryRunner(TestRunner):
                 f"""
             Configuring Forge profiles...
             -------------------------------------
-            Config file: {foundry_config_file}
+            Config file: {self.foundry_config_file}
             Binary type: {binary_type}
             Compiler path: {binary_path}
             -------------------------------------
         """
             )
         )
-        # FIXME: Add support to solcjs. Currently only native solc is supported.
+
+        # TODO: Add support to solcjs. Currently only native solc is supported.
         if binary_type == "solcjs":
-            raise RuntimeError(
+            raise NotImplementedError(
                 "Solcjs binaries are currently not supported with Foundry. Please use `native` binary_type."
             )
 
         profiles = []
         for preset in presets:
-            # TODO: parse presets and extract settings
             name = self.profile_name(preset)
             settings = settings_from_preset(preset, self.config.evm_version)
             profiles.append(
@@ -161,7 +134,9 @@ class FoundryRunner(TestRunner):
             )
 
         with open(
-            file=Path(self.test_dir) / foundry_config_file, mode="a", encoding="utf-8"
+            file=Path(self.test_dir) / self.foundry_config_file,
+            mode="a",
+            encoding="utf-8",
         ) as f:
             for profile in profiles:
                 f.write(profile)
@@ -189,7 +164,7 @@ class FoundryRunner(TestRunner):
             )
         )
         name = self.profile_name(preset)
-        # Set the profile environment variable
+        # Set the Foundry profile environment variable
         self.env.update({"FOUNDRY_PROFILE": name})
 
         if self.compile_fn is not None:

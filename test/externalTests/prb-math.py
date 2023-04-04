@@ -20,10 +20,8 @@
 # ------------------------------------------------------------------------------
 
 import sys
-import subprocess
-import json
 
-from exttest.common import CURRENT_EVM_VERSION
+from exttest.common import CURRENT_EVM_VERSION, InvalidConfigError
 from exttest.common import parse_command_line, run_test
 from exttest.common import TestConfig
 
@@ -31,52 +29,42 @@ from runners.foundry import FoundryRunner
 
 if __name__ == "__main__":
     try:
-        # Note: We currently accept solc_binary_type and solc_binary_path as parameters
-        # to keep compatibility with the current external tests framework.
         args = parse_command_line("PRBMath external tests", sys.argv[1:])
 
-        config_json = json.loads(
-            f"""
-        {{
-            "repo_url": "https://github.com/PaulRBerg/prb-math.git",
-            "ref_type": "branch",
-            "ref": "main",
-            "config_file": "foundry.toml",
-            "config_var": "config",
-            "build_dependency": "rust",
-            "compile_only_presets": [],
-            "settings_presets": [
-                "ir-optimize-evm+yul",
-                "legacy-optimize-evm-only",
-                "legacy-optimize-evm+yul",
-                "legacy-no-optimize"
-            ],
-            "evm_version": "{CURRENT_EVM_VERSION}",
-            "solc": {{
-                "binary_type": "{args.solc_binary_type}",
-                "binary_path": "{args.solc_binary_path}",
-                "branch": "master",
-                "install_dir": "solc/"
-            }}
-        }}"""
+        runner_config = TestConfig(
+            **{
+                "repo_url": "https://github.com/PaulRBerg/prb-math.git",
+                "ref_type": "branch",
+                "ref": "main",
+                "config_var": "config",
+                "build_dependency": "rust",
+                "compile_only_presets": [],
+                "settings_presets": [
+                    "ir-optimize-evm+yul",
+                    "legacy-optimize-evm-only",
+                    "legacy-optimize-evm+yul",
+                    "legacy-no-optimize",
+                ],
+                "evm_version": f"{CURRENT_EVM_VERSION}",
+                "solc": {
+                    "binary_type": f"{args.solc_binary_type}",
+                    "binary_path": f"{args.solc_binary_path}",
+                    "branch": "master",
+                    "install_dir": "solc/",
+                },
+            }
         )
 
-        config = TestConfig(**config_json)
         run_test(
-            config,
             "PRBMath",
             FoundryRunner(
-                config=config,
+                config=runner_config,
                 setup_fn=None,
                 compile_fn=None,
                 test_fn=None,
             ),
         )
-    except (
-        OSError,
-        SystemError,
-        RuntimeError,
-        subprocess.CalledProcessError,
-    ) as exception:
+
+    except InvalidConfigError as exception:
         print(f"Error while processing test: {exception}", file=sys.stderr)
         sys.exit(1)
