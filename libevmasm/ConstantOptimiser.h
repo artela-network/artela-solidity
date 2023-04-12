@@ -123,7 +123,7 @@ public:
 	AssemblyItems execute(Assembly& _assembly) const override;
 
 protected:
-	static AssemblyItems const& copyRoutine();
+	AssemblyItems const& copyRoutine() const;
 };
 
 /**

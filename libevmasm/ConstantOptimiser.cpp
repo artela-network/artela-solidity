@@ -84,7 +84,10 @@ bigint ConstantOptimisationMethod::simpleRunGas(AssemblyItems const& _items, lan
 	bigint gas = 0;
 	for (AssemblyItem const& item: _items)
 		if (item.type() == Push)
-			gas += GasMeter::runGas(Instruction::PUSH1, _evmVersion);
+		{
+			auto const instruction = (item.data() == u256(0) && _evmVersion.hasPush0()) ? Instruction::PUSH0 : Instruction::PUSH1;
+			gas += GasMeter::runGas(instruction, _evmVersion);
+		}
 		else if (item.type() == Operation)
 		{
 			if (item.instruction() == Instruction::EXP)
@@ -155,36 +158,72 @@ AssemblyItems CodeCopyMethod::execute(Assembly& _assembly) const
 	bytes data = toBigEndian(m_value);
 	assertThrow(data.size() == 32, OptimizerException, "Invalid number encoding.");
 	AssemblyItems actualCopyRoutine = copyRoutine();
-	actualCopyRoutine[4] = _assembly.newData(data);
+	if (m_params.evmVersion.hasPush0())
+		actualCopyRoutine[3] = _assembly.newData(data);
+	else
+		actualCopyRoutine[4] = _assembly.newData(data);
 	return actualCopyRoutine;
 }
 
-AssemblyItems const& CodeCopyMethod::copyRoutine()
+AssemblyItems const& CodeCopyMethod::copyRoutine() const
 {
-	AssemblyItems static copyRoutine{
-		// constant to be reused 3+ times
-		u256(0),
+	// PUSH0 is cheaper than PUSHn/DUP/SWAP.
+	if (m_params.evmVersion.hasPush0())
+	{
+		// This costs ~29 gas.
+		AssemblyItems static copyRoutine{
+			// back up memory
+			// mload(0)
+			u256(0),
+			Instruction::MLOAD,
 
-		// back up memory
-		// mload(0)
-		Instruction::DUP1,
-		Instruction::MLOAD,
+			// codecopy(0, <offset>, 32)
+			u256(32),
+			AssemblyItem(PushData, u256(1) << 16), // replaced above in actualCopyRoutine[3]
+			u256(0),
+			Instruction::CODECOPY,
 
-		// codecopy(0, <offset>, 32)
-		u256(32),
-		AssemblyItem(PushData, u256(1) << 16), // replaced above in actualCopyRoutine[4]
-		Instruction::DUP4,
-		Instruction::CODECOPY,
+			// mload(0)
+			u256(0),
+			Instruction::MLOAD,
 
-		// mload(0)
-		Instruction::DUP2,
-		Instruction::MLOAD,
+			// restore original memory
+			// mstore(0, x)
+			Instruction::SWAP1,
+			u256(0),
+			Instruction::MSTORE
+		};
+		return copyRoutine;
+	}
+	else
+	{
+		// This costs ~33 gas.
+		AssemblyItems static copyRoutine{
+			// constant to be reused 3+ times
+			u256(0),
 
-		// restore original memory
-		Instruction::SWAP2,
-		Instruction::MSTORE
-	};
-	return copyRoutine;
+			// back up memory
+			// mload(0)
+			Instruction::DUP1,
+			Instruction::MLOAD,
+
+			// codecopy(0, <offset>, 32)
+			u256(32),
+			AssemblyItem(PushData, u256(1) << 16), // replaced above in actualCopyRoutine[4]
+			Instruction::DUP4,
+			Instruction::CODECOPY,
+
+			// mload(0)
+			Instruction::DUP2,
+			Instruction::MLOAD,
+
+			// restore original memory
+			// mstore(0, x)
+			Instruction::SWAP2,
+			Instruction::MSTORE
+		};
+		return copyRoutine;
+	}
 }
 
 AssemblyItems ComputeMethod::findRepresentation(u256 const& _value)
