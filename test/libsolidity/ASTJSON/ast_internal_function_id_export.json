@@ -64,6 +64,7 @@
       "scope": 142,
       "src": "0:19:1",
       "stateMutability": "nonpayable",
+      "suffix": false,
       "virtual": false,
       "visibility": "internal"
     },
@@ -100,6 +101,7 @@
       "scope": 142,
       "src": "20:19:1",
       "stateMutability": "nonpayable",
+      "suffix": false,
       "virtual": false,
       "visibility": "internal"
     },
@@ -135,6 +137,7 @@
       "scope": 142,
       "src": "40:19:1",
       "stateMutability": "nonpayable",
+      "suffix": false,
       "virtual": false,
       "visibility": "internal"
     },
@@ -188,6 +191,7 @@
           "scope": 53,
           "src": "76:26:1",
           "stateMutability": "nonpayable",
+          "suffix": false,
           "virtual": false,
           "visibility": "external"
         },
@@ -224,6 +228,7 @@
           "scope": 53,
           "src": "107:27:1",
           "stateMutability": "nonpayable",
+          "suffix": false,
           "virtual": false,
           "visibility": "internal"
         },
@@ -260,6 +265,7 @@
           "scope": 53,
           "src": "139:27:1",
           "stateMutability": "nonpayable",
+          "suffix": false,
           "virtual": false,
           "visibility": "internal"
         },
@@ -295,6 +301,7 @@
           "scope": 53,
           "src": "171:27:1",
           "stateMutability": "nonpayable",
+          "suffix": false,
           "virtual": false,
           "visibility": "internal"
         },
@@ -408,6 +415,7 @@
           "scope": 53,
           "src": "203:76:1",
           "stateMutability": "nonpayable",
+          "suffix": false,
           "virtual": false,
           "visibility": "public"
         },
@@ -562,6 +570,7 @@
           "scope": 53,
           "src": "284:73:1",
           "stateMutability": "nonpayable",
+          "suffix": false,
           "virtual": false,
           "visibility": "public"
         }
@@ -620,6 +629,7 @@
           "scope": 128,
           "src": "377:27:1",
           "stateMutability": "nonpayable",
+          "suffix": false,
           "virtual": false,
           "visibility": "external"
         },
@@ -656,6 +666,7 @@
           "scope": 128,
           "src": "409:27:1",
           "stateMutability": "nonpayable",
+          "suffix": false,
           "virtual": false,
           "visibility": "external"
         },
@@ -692,6 +703,7 @@
           "scope": 128,
           "src": "441:27:1",
           "stateMutability": "nonpayable",
+          "suffix": false,
           "virtual": false,
           "visibility": "external"
         },
@@ -728,6 +740,7 @@
           "scope": 128,
           "src": "473:27:1",
           "stateMutability": "nonpayable",
+          "suffix": false,
           "virtual": false,
           "visibility": "internal"
         },
@@ -764,6 +777,7 @@
           "scope": 128,
           "src": "505:27:1",
           "stateMutability": "nonpayable",
+          "suffix": false,
           "virtual": false,
           "visibility": "internal"
         },
@@ -799,6 +813,7 @@
           "scope": 128,
           "src": "537:27:1",
           "stateMutability": "nonpayable",
+          "suffix": false,
           "virtual": false,
           "visibility": "internal"
         },
@@ -986,6 +1001,7 @@
           "scope": 128,
           "src": "569:111:1",
           "stateMutability": "nonpayable",
+          "suffix": false,
           "virtual": false,
           "visibility": "public"
         },
@@ -1368,6 +1384,7 @@
           "scope": 128,
           "src": "685:135:1",
           "stateMutability": "nonpayable",
+          "suffix": false,
           "virtual": false,
           "visibility": "public"
         }
@@ -1527,6 +1544,7 @@
           "scope": 141,
           "src": "845:61:1",
           "stateMutability": "nonpayable",
+          "suffix": false,
           "virtual": false,
           "visibility": "public"
         }
