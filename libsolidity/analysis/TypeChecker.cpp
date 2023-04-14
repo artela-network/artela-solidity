@@ -2210,7 +2210,7 @@ void TypeChecker::typeCheckSuffixFunctionCall(
 	solAssert(_functionType);
 	solAssert(_functionCall.isSuffixCall());
 
-	vector<ASTPointer<Expression const>> const& arguments = _functionCall.arguments();
+	vector<ASTPointer<Expression const>> const& arguments = _functionCall.sortedArguments();
 	solAssert(arguments.size() == 1 && arguments[0]);
 
 	auto const* literal = dynamic_cast<Literal const*>(arguments[0].get());
