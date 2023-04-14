@@ -2296,14 +2296,14 @@ void TypeChecker::typeCheckSuffixFunctionCall(
 						mantissaOrExponentErrorMessages.emplace_back(
 							fmt::format(
 								"The mantissa is out of range of type {}.",
-								_functionType->parameterTypes()[0]->toString(true)
+								_functionType->parameterTypes()[0]->humanReadableName()
 							)
 						);
 					if (!exponent->isImplicitlyConvertibleTo(*_functionType->parameterTypes()[1]))
 						mantissaOrExponentErrorMessages.emplace_back(
 							fmt::format(
 								"The exponent is out of range of type {}.",
-								_functionType->parameterTypes()[1]->toString(true)
+								_functionType->parameterTypes()[1]->humanReadableName()
 							)
 						);
 
@@ -2347,7 +2347,7 @@ void TypeChecker::typeCheckSuffixFunctionCall(
 					"{} {} type {} accepted by the suffix function.",
 					literalDescription,
 					errorReason,
-					_functionType->parameterTypes()[0]->toString(true)
+					_functionType->parameterTypes()[0]->humanReadableName()
 				);
 			}
 		}
