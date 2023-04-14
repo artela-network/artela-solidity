@@ -68,31 +68,31 @@ contract C {
 // ----
 // TypeError 8838: (635-636): The number cannot be converted to type bool accepted by the suffix function.
 // TypeError 8838: (657-658): The number cannot be converted to type address accepted by the suffix function.
-// TypeError 8838: (721-722): The number cannot be converted to type string accepted by the suffix function.
-// TypeError 8838: (745-746): The number cannot be converted to type bytes accepted by the suffix function.
+// TypeError 8838: (721-722): The number cannot be converted to type string memory accepted by the suffix function.
+// TypeError 8838: (745-746): The number cannot be converted to type bytes memory accepted by the suffix function.
 // TypeError 8838: (808-812): The number is out of range of type int8 accepted by the suffix function.
 // TypeError 8838: (833-837): The number cannot be converted to type bool accepted by the suffix function.
 // TypeError 8838: (858-862): The number cannot be converted to type address accepted by the suffix function.
-// TypeError 8838: (925-929): The number cannot be converted to type string accepted by the suffix function.
-// TypeError 8838: (952-956): The number cannot be converted to type bytes accepted by the suffix function.
+// TypeError 8838: (925-929): The number cannot be converted to type string memory accepted by the suffix function.
+// TypeError 8838: (952-956): The number cannot be converted to type bytes memory accepted by the suffix function.
 // TypeError 8838: (979-983): The literal cannot be converted to type uint256 accepted by the suffix function.
 // TypeError 8838: (1004-1008): The literal cannot be converted to type int8 accepted by the suffix function.
 // TypeError 8838: (1068-1072): The literal cannot be converted to type address accepted by the suffix function.
 // TypeError 2505: (1101-1114): Functions that take 2 arguments can only be used as literal suffixes for rational numbers.
-// TypeError 8838: (1124-1128): The literal cannot be converted to type string accepted by the suffix function.
-// TypeError 8838: (1151-1155): The literal cannot be converted to type bytes accepted by the suffix function.
+// TypeError 8838: (1124-1128): The literal cannot be converted to type string memory accepted by the suffix function.
+// TypeError 8838: (1151-1155): The literal cannot be converted to type bytes memory accepted by the suffix function.
 // TypeError 8838: (1178-1220): The address cannot be converted to type uint256 accepted by the suffix function.
 // TypeError 8838: (1241-1283): The address cannot be converted to type int8 accepted by the suffix function.
 // TypeError 8838: (1304-1346): The address cannot be converted to type bool accepted by the suffix function.
 // TypeError 2505: (1487-1500): Functions that take 2 arguments can only be used as literal suffixes for rational numbers.
-// TypeError 8838: (1510-1552): The address cannot be converted to type string accepted by the suffix function.
-// TypeError 8838: (1575-1617): The address cannot be converted to type bytes accepted by the suffix function.
+// TypeError 8838: (1510-1552): The address cannot be converted to type string memory accepted by the suffix function.
+// TypeError 8838: (1575-1617): The address cannot be converted to type bytes memory accepted by the suffix function.
 // TypeError 8838: (1640-1643): The number cannot be converted to type uint256 accepted by the suffix function.
 // TypeError 8838: (1664-1667): The number cannot be converted to type int8 accepted by the suffix function.
 // TypeError 8838: (1688-1691): The number cannot be converted to type bool accepted by the suffix function.
 // TypeError 8838: (1712-1715): The number cannot be converted to type address accepted by the suffix function.
-// TypeError 8838: (1777-1780): The number cannot be converted to type string accepted by the suffix function.
-// TypeError 8838: (1803-1806): The number cannot be converted to type bytes accepted by the suffix function.
+// TypeError 8838: (1777-1780): The number cannot be converted to type string memory accepted by the suffix function.
+// TypeError 8838: (1803-1806): The number cannot be converted to type bytes memory accepted by the suffix function.
 // TypeError 8838: (1829-1832): The literal cannot be converted to type uint256 accepted by the suffix function.
 // TypeError 8838: (1853-1856): The literal cannot be converted to type int8 accepted by the suffix function.
 // TypeError 8838: (1877-1880): The literal cannot be converted to type bool accepted by the suffix function.
@@ -103,4 +103,4 @@ contract C {
 // TypeError 8838: (2092-2101): The literal cannot be converted to type bool accepted by the suffix function.
 // TypeError 8838: (2122-2131): The literal cannot be converted to type address accepted by the suffix function.
 // TypeError 2505: (2165-2178): Functions that take 2 arguments can only be used as literal suffixes for rational numbers.
-// TypeError 8838: (2188-2197): The literal cannot be converted to type string accepted by the suffix function.
+// TypeError 8838: (2188-2197): The literal cannot be converted to type string memory accepted by the suffix function.
