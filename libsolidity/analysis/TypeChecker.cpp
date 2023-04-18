@@ -437,42 +437,9 @@ bool TypeChecker::visit(FunctionDefinition const& _function)
 				"Only pure functions can be used as literal suffixes"
 			);
 
-		optional<string> parameterCountMessage;
-		if (_function.parameterList().parameters().size() == 0)
-			parameterCountMessage = "Functions that take no arguments cannot be used as literal suffixes.";
-		else if (_function.parameterList().parameters().size() >= 3)
-			parameterCountMessage = "Functions that take 3 or more arguments cannot be used as literal suffixes.";
-
-		if (parameterCountMessage.has_value())
-			m_errorReporter.typeError(9128_error, _function.parameterList().location(), parameterCountMessage.value());
-		else if (_function.parameterList().parameters().size() == 2)
+		switch (_function.parameterList().parameters().size())
 		{
-			auto const* mantissaType = dynamic_cast<IntegerType const*>(_function.parameterList().parameters()[0]->type());
-			auto const* exponentType = dynamic_cast<IntegerType const*>(_function.parameterList().parameters()[1]->type());
-
-			vector<string> mantissaOrExponentTypeErrorMessages;
-			if (!mantissaType)
-				mantissaOrExponentTypeErrorMessages.emplace_back("The mantissa parameter must be an integer.");
-			if (!exponentType)
-				mantissaOrExponentTypeErrorMessages.emplace_back("The exponent parameter must be an unsigned integer.");
-
-			if (!mantissaOrExponentTypeErrorMessages.empty())
-				m_errorReporter.typeError(
-					1587_error,
-					_function.parameterList().location(),
-					"Literal suffix function has invalid parameter types. " +
-					joinHumanReadable(mantissaOrExponentTypeErrorMessages, " ")
-				);
-
-			if (exponentType && exponentType->isSigned())
-				m_errorReporter.typeError(
-					3123_error,
-					_function.parameterList().parameters()[1]->typeName().location(),
-					"The exponent parameter of a literal suffix function must be unsigned. "
-					"Exponent is always either zero or a negative power of 10 but the parameter represents its absolute value."
-				);
-		}
-		else if (_function.parameterList().parameters().size() == 1)
+		case 1:
 		{
 			auto const* parameterType = _function.parameterList().parameters()[0]->type();
 
@@ -501,17 +468,56 @@ bool TypeChecker::visit(FunctionDefinition const& _function)
 					"This literal suffix function is not usable as a suffix because no literal is "
 					"implicitly convertible to its parameter type."
 				);
+
+			break;
+		}
+
+		case 2:
+		{
+			auto const* mantissaType = dynamic_cast<IntegerType const*>(_function.parameterList().parameters()[0]->type());
+			auto const* exponentType = dynamic_cast<IntegerType const*>(_function.parameterList().parameters()[1]->type());
+
+			vector<string> mantissaOrExponentTypeErrorMessages;
+			if (!mantissaType)
+				mantissaOrExponentTypeErrorMessages.emplace_back("The mantissa parameter must be an integer.");
+			if (!exponentType)
+				mantissaOrExponentTypeErrorMessages.emplace_back("The exponent parameter must be an unsigned integer.");
+
+			if (!mantissaOrExponentTypeErrorMessages.empty())
+				m_errorReporter.typeError(
+					1587_error,
+					_function.parameterList().location(),
+					"Literal suffix function has invalid parameter types. " +
+					joinHumanReadable(mantissaOrExponentTypeErrorMessages, " ")
+				);
+
+			if (exponentType && exponentType->isSigned())
+				m_errorReporter.typeError(
+					3123_error,
+					_function.parameterList().parameters()[1]->typeName().location(),
+					"The exponent parameter of a literal suffix function must be unsigned. "
+					"Exponent is always either zero or a negative power of 10 but the parameter represents its absolute value."
+				);
+
+			break;
+		}
+
+		default:
+			m_errorReporter.typeError(
+				9128_error,
+				_function.parameterList().location(),
+				"Only functions that take one or two arguments can be used as literal suffixes."
+			);
+			break;
 		}
 
 		solAssert(_function.returnParameterList());
 		if (_function.returnParameterList()->parameters().size() != 1)
-		{
 			m_errorReporter.typeError(
 				7848_error,
 				_function.returnParameterList()->location(),
 				"Literal suffix functions must return exactly one value."
 			);
-		}
 
 		for (ASTPointer<VariableDeclaration const> returnParameter: _function.returnParameterList()->parameters())
 		{
@@ -2254,7 +2260,44 @@ void TypeChecker::typeCheckSuffixFunctionCall(
 		auto const* literalRationalType = dynamic_cast<RationalNumberType const*>(literalType);
 
 		optional<string> parameterTypeMessage;
-		if (_functionType->parameterTypes().size() == 2)
+		switch (_functionType->parameterTypes().size())
+		{
+		case 1:
+		{
+			if (literalType->isImplicitlyConvertibleTo(*_functionType->parameterTypes()[0]))
+				break;
+
+			string errorReason;
+			string literalDescription;
+
+			if (literalRationalType)
+				literalDescription = "The number";
+			else if (dynamic_cast<AddressType const*>(literalType))
+				// Address literals and hex numbers are not easy to distinguish without counting the digits.
+				// The user may not even realize we see it as an address. Let's point that out in the message for clarity.
+				literalDescription = "The address";
+			else
+				literalDescription = "The literal";
+
+			if (
+				dynamic_cast<IntegerType const*>(_functionType->parameterTypes()[0]) &&
+				literalRationalType &&
+				!literalRationalType->isFractional()
+			)
+				errorReason = "is out of range of";
+			else
+				errorReason = "cannot be converted to";
+
+			parameterTypeMessage = fmt::format(
+				"{} {} type {} accepted by the suffix function.",
+				literalDescription,
+				errorReason,
+				_functionType->parameterTypes()[0]->humanReadableName()
+			);
+			break;
+		}
+
+		case 2:
 		{
 			if (!literalRationalType)
 				m_errorReporter.typeError(
@@ -2288,71 +2331,41 @@ void TypeChecker::typeCheckSuffixFunctionCall(
 						"{} out of range of the largest supported integer type.",
 						mantissaOrExponentErrorMessage
 					);
+					break;
 				}
-				else
-				{
-					vector<string> mantissaOrExponentErrorMessages;
-					if (!mantissa->isImplicitlyConvertibleTo(*_functionType->parameterTypes()[0]))
-						mantissaOrExponentErrorMessages.emplace_back(
-							fmt::format(
-								"The mantissa is out of range of type {}.",
-								_functionType->parameterTypes()[0]->humanReadableName()
-							)
-						);
-					if (!exponent->isImplicitlyConvertibleTo(*_functionType->parameterTypes()[1]))
-						mantissaOrExponentErrorMessages.emplace_back(
-							fmt::format(
-								"The exponent is out of range of type {}.",
-								_functionType->parameterTypes()[1]->humanReadableName()
-							)
-						);
 
-					if (!mantissaOrExponentErrorMessages.empty())
-						parameterTypeMessage =
-							"This number cannot be decomposed into a mantissa and decimal exponent "
-							"that fit the range of parameters of the suffix function. " +
-							joinHumanReadable(mantissaOrExponentErrorMessages, " ");
-				}
+				vector<string> mantissaOrExponentErrorMessages;
+				if (!mantissa->isImplicitlyConvertibleTo(*_functionType->parameterTypes()[0]))
+					mantissaOrExponentErrorMessages.emplace_back(
+						fmt::format(
+							"The mantissa is out of range of type {}.",
+							_functionType->parameterTypes()[0]->humanReadableName()
+						)
+					);
+				if (!exponent->isImplicitlyConvertibleTo(*_functionType->parameterTypes()[1]))
+					mantissaOrExponentErrorMessages.emplace_back(
+						fmt::format(
+							"The exponent is out of range of type {}.",
+							_functionType->parameterTypes()[1]->humanReadableName()
+						)
+					);
+
+				if (!mantissaOrExponentErrorMessages.empty())
+					parameterTypeMessage =
+						"This number cannot be decomposed into a mantissa and decimal exponent "
+						"that fit the range of parameters of the suffix function. " +
+						joinHumanReadable(mantissaOrExponentErrorMessages, " ");
 			}
 			else
 				// visit(FunctionDefinition) should have spotted if any of the parameters is not IntegerType
 				solAssert(m_errorReporter.hasErrors());
+
+			break;
 		}
-		else if (_functionType->parameterTypes().size() == 1)
-		{
-			if (!literalType->isImplicitlyConvertibleTo(*_functionType->parameterTypes()[0]))
-			{
-				string errorReason;
-				string literalDescription;
 
-				if (literalRationalType)
-					literalDescription = "The number";
-				else if (dynamic_cast<AddressType const*>(literalType))
-					// Address literals and hex numbers are not easy to distinguish without counting the digits.
-					// The user may not even realize we see it as an address. Let's point that out in the message for clarity.
-					literalDescription = "The address";
-				else
-					literalDescription = "The literal";
-
-				if (
-					dynamic_cast<IntegerType const*>(_functionType->parameterTypes()[0]) &&
-					literalRationalType &&
-					!literalRationalType->isFractional()
-				)
-					errorReason = "is out of range of";
-				else
-					errorReason = "cannot be converted to";
-
-				parameterTypeMessage = fmt::format(
-					"{} {} type {} accepted by the suffix function.",
-					literalDescription,
-					errorReason,
-					_functionType->parameterTypes()[0]->humanReadableName()
-				);
-			}
-		}
-		else
+		default:
 			solAssert(m_errorReporter.hasErrors());
+		}
 
 		if (parameterTypeMessage.has_value())
 			m_errorReporter.typeError(
