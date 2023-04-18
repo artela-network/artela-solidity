@@ -172,19 +172,19 @@ locals[
 		| modifierInvocation
 		| {!$virtualSet}? Virtual {$virtualSet = true;}
 		| {!$overrideSpecifierSet}? overrideSpecifier {$overrideSpecifierSet = true;}
-	 )*
+	)*
 	(Returns LParen returnParameters=parameterList RParen)?
 	(Semicolon | body=block);
 
 /**
  * The definition of a free function.
  */
- freeFunctionDefinition:
- 	Function (identifier | Fallback | Receive)
- 	LParen (arguments=parameterList)? RParen
- 	stateMutability?
- 	(Returns LParen returnParameters=parameterList RParen)?
- 	(Semicolon | body=block);
+freeFunctionDefinition:
+	Function (identifier | Fallback | Receive)
+	LParen (arguments=parameterList)? RParen
+	stateMutability?
+	(Returns LParen returnParameters=parameterList RParen)?
+	(Semicolon | body=block);
 
 /**
  * The definition of a modifier.
