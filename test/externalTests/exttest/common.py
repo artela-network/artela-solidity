@@ -277,15 +277,20 @@ def store_benchmark_report(self):
 def prepare_node_env(test_dir: Path):
     if which("node") is None:
         raise RuntimeError("nodejs not found.")
-    # Remove lock files (if they exist) to prevent them from overriding our changes in package.json
+    # Remove lock files (if they exist) to prevent them from overriding
+    # our changes in package.json
     print("Removing package lock files...")
-    rmtree(test_dir / "yarn.lock")
-    rmtree(test_dir / "package_lock.json")
-    # TODO: neutralize_package_json_hooks
+    rmtree(test_dir / "yarn.lock", ignore_errors=True)
+    rmtree(test_dir / "package_lock.json", ignore_errors=True)
+
     print("Disabling package.json hooks...")
-    if not (test_dir / "package.json").exists():
+    package_json_path = test_dir / "package.json"
+    if not package_json_path.exists():
         raise FileNotFoundError("package.json not found.")
-    # TODO: replace prepublish and prepare
+    package_json = open(package_json_path, "r").read()
+    package_json = re.sub(r'("prepublish":)\s".+"', lambda m: f'{m.group(1)} ""', package_json)
+    package_json = re.sub(r'("prepare":)\s".+"', lambda m: f'{m.group(1)} ""', package_json)
+    open(package_json_path, "w").write(package_json)
 
 
 def run_test(name: str, runner: TestRunner):
