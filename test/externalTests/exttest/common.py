@@ -84,7 +84,7 @@ class TestConfig:
             self.solc = SolcConfig(**self.solc)
 
     def selected_presets(self):
-        return self.compile_only_presets + self.settings_presets
+        return set(self.compile_only_presets + self.settings_presets)
 
 
 class InvalidConfigError(Exception):
@@ -323,9 +323,11 @@ def run_test(name: str, runner: TestRunner):
         for preset in rconfig.selected_presets():
             print("Running compile function...")
             runner.compile(solc_version, preset)
-            # TODO: skip tests if compile_only_presets
-            print("Running test function...")
-            runner.run_test(preset)
+            if os.environ.get("COMPILE_ONLY") == "1" or preset in rconfig.compile_only_presets:
+                print("Skipping test function...")
+            else:
+                print("Running test function...")
+                runner.run_test(preset)
             # TODO: store_benchmark_report
             # runner.clean()
         print("Done.")
