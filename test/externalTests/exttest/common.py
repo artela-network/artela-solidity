@@ -160,15 +160,15 @@ def settings_from_preset(preset, evm_version) -> Dict:
 def parse_command_line(description: str, args: str):
     arg_parser = ArgumentParser(description)
     arg_parser.add_argument(
-        "--solc-binary-type",
-        required=True,
+        "solc_binary_type",
+        metavar="solc-binary-type",
         type=str,
         help="""Solidity compiler binary type""",
         choices=["native", "solcjs"],
     )
     arg_parser.add_argument(
-        "--solc-binary-path",
-        required=True,
+        "solc_binary_path",
+        metavar="solc-binary-path",
         type=str,
         help="""Path to solc or soljson.js binary""",
     )
