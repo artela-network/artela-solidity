@@ -29,9 +29,8 @@ import subprocess
 from shutil import which, copyfile, copytree, rmtree
 from argparse import ArgumentParser
 
-from collections import defaultdict
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, Optional, Tuple
 
 import re
 from abc import ABCMeta, abstractmethod
@@ -60,8 +59,8 @@ AVAILABLE_PRESETS: Tuple[str] = (
 
 @dataclass
 class SolcConfig:
-    binary_type: str
-    binary_path: str
+    binary_type: str = field(default="native")
+    binary_path: str = field(default="/usr/local/bin/solc")
     branch: Optional[str] = field(default="master")
     install_dir: Optional[str] = field(default="solc")
     solcjs_src_dir: Optional[str] = field(default="")
@@ -72,12 +71,11 @@ class TestConfig:
     repo_url: str
     ref_type: str
     ref: str
-    config_var: Optional[str]
     build_dependency: Optional[str] = field(default="nodejs")
-    compile_only_presets: Optional[List[str]] = field(default_factory=list)
-    settings_presets: Optional[List[str]] = field(default_factory=list)
+    compile_only_presets: Optional[Tuple[str]] = field(default_factory=tuple)
+    settings_presets: Optional[Tuple[str]] = field(default=AVAILABLE_PRESETS)
     evm_version: Optional[str] = field(default=CURRENT_EVM_VERSION)
-    solc: Dict[str, SolcConfig] = field(default_factory=lambda: defaultdict(SolcConfig))
+    solc: Optional[SolcConfig] = field(default_factory=SolcConfig)
 
     def __post_init__(self):
         if isinstance(self.solc, dict):
@@ -215,9 +213,7 @@ def parse_solc_version(solc_version_string):
     solc_version_match = re.search(SOLC_FULL_VERSION_REGEX, solc_version_string)
     if solc_version_match:
         return solc_version_match.group(1)
-    raise RuntimeError(
-        f"Solc version could not be found in: {solc_version_string}."
-    )
+    raise RuntimeError(f"Solc version could not be found in: {solc_version_string}.")
 
 
 def get_solc_short_version(solc_full_version):
@@ -262,15 +258,12 @@ def setup_solc(config: TestConfig, test_dir: Path) -> (str, str):
         solc_version_output = subprocess.getoutput(f"node {solc_bin} --version")
     else:
         print("Setting up solc...")
-        solc_version_output = subprocess.getoutput(
-            f"{sc_config.binary_path} --version"
-        ).split(":")[1]
+        solc_version_output = subprocess.getoutput(f"{sc_config.binary_path} --version").split(":")[1]
 
     return parse_solc_version(solc_version_output)
 
 
 def store_benchmark_report(self):
-    # TODO
     raise NotImplementedError()
 
 
@@ -287,22 +280,33 @@ def prepare_node_env(test_dir: Path):
     package_json_path = test_dir / "package.json"
     if not package_json_path.exists():
         raise FileNotFoundError("package.json not found.")
-    package_json = open(package_json_path, "r").read()
-    package_json = re.sub(r'("prepublish":)\s".+"', lambda m: f'{m.group(1)} ""', package_json)
-    package_json = re.sub(r'("prepare":)\s".+"', lambda m: f'{m.group(1)} ""', package_json)
-    open(package_json_path, "w").write(package_json)
+    package_json = package_json_path.read_text(encoding="utf-8")
+    package_json = re.sub(
+        r'("prepublish":)\s".+"',
+        lambda m: f'{m.group(1)} ""',
+        package_json
+    )
+    package_json = re.sub(
+        r'("prepare":)\s".+"',
+        lambda m: f'{m.group(1)} ""',
+        package_json
+    )
+    with open(package_json_path, "w", encoding="utf-8") as f:
+        f.write(package_json)
 
 
 def replace_version_pragmas(test_dir: Path):
     """
-        Replace fixed-version pragmas (part of Consensys best practice).
-        Include all directories to also cover node dependencies.
+    Replace fixed-version pragmas (part of Consensys best practice).
+    Include all directories to also cover node dependencies.
     """
     print("Replacing fixed-version pragmas...")
     for source in test_dir.glob("**/*.sol"):
-        content = open(source, "r").read()
-        content = re.sub(r'pragma solidity [^;]+;', r'pragma solidity >=0.0;', content)
-        open(source, "w").write(content)
+        content = source.read_text(encoding="utf-8")
+        content = re.sub(r"pragma solidity [^;]+;", r"pragma solidity >=0.0;", content)
+        with open(source, "w", encoding="utf-8") as f:
+            f.write(content)
+
 
 def run_test(name: str, runner: TestRunner):
     rconfig = runner.config
@@ -315,6 +319,7 @@ def run_test(name: str, runner: TestRunner):
             f"""Invalid test configuration: 'native' mode cannot be used with 'solcjs_src_dir'.
             Please use 'binary_type: solcjs' or unset: 'solcjs_src_dir: {rconfig.solc.solcjs_src_dir}'"""
         )
+
     print(f"Testing {name}...\n===========================")
     with TemporaryDirectory(prefix=f"ext-test-{name}-") as tmp_dir:
         test_dir = Path(tmp_dir) / "ext"
@@ -334,12 +339,16 @@ def run_test(name: str, runner: TestRunner):
         runner.setup_environment(test_dir)
 
         replace_version_pragmas(test_dir)
+
         # Configure TestRunner instance
         runner.compiler_settings(solc_version, presets)
         for preset in rconfig.selected_presets():
             print("Running compile function...")
             runner.compile(solc_version, preset)
-            if os.environ.get("COMPILE_ONLY") == "1" or preset in rconfig.compile_only_presets:
+            if (
+                os.environ.get("COMPILE_ONLY") == "1"
+                or preset in rconfig.compile_only_presets
+            ):
                 print("Skipping test function...")
             else:
                 print("Running test function...")

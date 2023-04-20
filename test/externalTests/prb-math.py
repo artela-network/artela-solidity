@@ -36,7 +36,6 @@ if __name__ == "__main__":
                 "repo_url": "https://github.com/PaulRBerg/prb-math.git",
                 "ref_type": "branch",
                 "ref": "main",
-                "config_var": "config",
                 "build_dependency": "rust",
                 "compile_only_presets": [],
                 "settings_presets": [
