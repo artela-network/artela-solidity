@@ -91,9 +91,6 @@ bool YulStack::parseAndAnalyze(std::string const& _sourceName, std::string const
 
 void YulStack::optimize()
 {
-	if (!m_optimiserSettings.runYulOptimiser)
-		return;
-
 	yulAssert(m_analysisSuccessful, "Analysis was not successful.");
 
 	m_analysisSuccessful = false;
@@ -182,13 +179,25 @@ void YulStack::optimize(Object& _object, bool _isCreation)
 	unique_ptr<GasMeter> meter;
 	if (EVMDialect const* evmDialect = dynamic_cast<EVMDialect const*>(&dialect))
 		meter = make_unique<GasMeter>(*evmDialect, _isCreation, m_optimiserSettings.expectedExecutionsPerDeployment);
+
+	// Defaults are the minimum necessary to avoid running into "Stack too deep" constantly.
+	bool optimizeStackAllocation = true;
+	string yulOptimiserSteps = "u";
+	string yulOptimiserCleanupSteps = "";
+	if (m_optimiserSettings.runYulOptimiser)
+	{
+		optimizeStackAllocation = m_optimiserSettings.optimizeStackAllocation;
+		yulOptimiserSteps = m_optimiserSettings.yulOptimiserSteps;
+		yulOptimiserCleanupSteps = m_optimiserSettings.yulOptimiserCleanupSteps;
+	}
+
 	OptimiserSuite::run(
 		dialect,
 		meter.get(),
 		_object,
-		m_optimiserSettings.optimizeStackAllocation,
-		m_optimiserSettings.yulOptimiserSteps,
-		m_optimiserSettings.yulOptimiserCleanupSteps,
+		optimizeStackAllocation,
+		yulOptimiserSteps,
+		yulOptimiserCleanupSteps,
 		_isCreation ? nullopt : make_optional(m_optimiserSettings.expectedExecutionsPerDeployment),
 		{}
 	);
@@ -266,7 +275,10 @@ YulStack::assembleEVMWithDeployed(optional<string_view> _deployName) const
 
 	evmasm::Assembly assembly(m_evmVersion, true, {});
 	EthAssemblyAdapter adapter(assembly);
-	compileEVM(adapter, m_optimiserSettings.optimizeStackAllocation);
+
+	// NOTE: Yul optimizer being disabled only means that we don't run the full step sequence.
+	// We still run the minimal steps required to avoid "stack too deep" and we need stack optimization too.
+	compileEVM(adapter, m_optimiserSettings.optimizeStackAllocation || !m_optimiserSettings.runYulOptimiser);
 
 	assembly.optimise(evmasm::Assembly::OptimiserSettings::translateSettings(m_optimiserSettings, m_evmVersion));
 
