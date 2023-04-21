@@ -46,11 +46,12 @@ function zeppelin_test
     local ref="master"
     local config_file="hardhat.config.js"
 
-    local compile_only_presets=()
+    local compile_only_presets=(
+        ir-no-optimize            # FIXME: A few tests fail with "Transaction: ... exited with an error (status 0) after consuming all gas."
+        ir-optimize-evm-only      # FIXME: A few tests fail with "Transaction: ... exited with an error (status 0) after consuming all gas."
+)
     local settings_presets=(
         "${compile_only_presets[@]}"
-        #ir-no-optimize           # Compilation fails with "YulException: Variable var_account_852 is 4 slot(s) too deep inside the stack."
-        #ir-optimize-evm-only     # Compilation fails with "YulException: Variable var_account_852 is 4 slot(s) too deep inside the stack."
         ir-optimize-evm+yul
         legacy-no-optimize
         legacy-optimize-evm-only
