@@ -1283,9 +1283,9 @@ pair<RationalNumberType const*, RationalNumberType const*> RationalNumberType::f
 		unsignedMantissa *= 10;
 		++negatedExponent;
 
-		// NOTE: Technically RationalNumberType::isValidLiteral() should not allow an exponent so
-		// large we cannot store it in 4096 bits. For some reason it does not validate numbers not
-		// in scientific notation though. See https://github.com/ethereum/solidity/issues/14100
+		// NOTE: The exponent calculated here can be arbitrarily large because we do not limit precision
+		// of rational literals. While the language does not allow very large exponents in scientific
+		// notation, the number of significant digits in the literal itself is unlimited.
 		if (negatedExponent > maxUint && unsignedMantissa > maxMantissa)
 			return {nullptr, nullptr};
 		if (negatedExponent > maxUint)
