@@ -1283,9 +1283,6 @@ pair<RationalNumberType const*, RationalNumberType const*> RationalNumberType::f
 		unsignedMantissa *= 10;
 		++negatedExponent;
 
-		// NOTE: The exponent calculated here can be arbitrarily large because we do not limit precision
-		// of rational literals. While the language does not allow very large exponents in scientific
-		// notation, the number of significant digits in the literal itself is unlimited.
 		if (negatedExponent > maxUint && unsignedMantissa > maxMantissa)
 			return {nullptr, nullptr};
 		if (negatedExponent > maxUint)
