@@ -3,10 +3,7 @@ function s(string memory) pure returns (string memory) {}
 
 contract C {
     function run() public pure {
-        1 s;    // OK
-        s(1);   // OK
-        "a" s;  // not allowed
-        s("a"); // OK
+        1 s;
     }
 }
 // ----
