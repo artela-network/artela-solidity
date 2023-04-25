@@ -17,8 +17,8 @@ contract C {
 
         "a" uintUintUintSuffix;
         "a" stringStringStringSuffix;
-        "a" uintStringSuffix;
-        "a" stringUintSuffix;
+        "a" uintStringSuffix;           // Error both here and at suffix definition.
+        "a" stringUintSuffix;           // Error both here and at suffix definition.
     }
 }
 // ----
@@ -27,4 +27,4 @@ contract C {
 // TypeError 1587: (232-253): Literal suffix function has invalid parameter types. The exponent parameter must be an unsigned integer.
 // TypeError 1587: (320-341): Literal suffix function has invalid parameter types. The mantissa parameter must be an integer.
 // TypeError 2505: (764-780): Functions that take 2 arguments can only be used as literal suffixes for rational numbers.
-// TypeError 2505: (794-810): Functions that take 2 arguments can only be used as literal suffixes for rational numbers.
+// TypeError 2505: (849-865): Functions that take 2 arguments can only be used as literal suffixes for rational numbers.
