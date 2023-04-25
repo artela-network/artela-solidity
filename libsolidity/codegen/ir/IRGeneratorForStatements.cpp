@@ -1022,13 +1022,8 @@ void IRGeneratorForStatements::endVisit(FunctionCall const& _functionCall)
 			auto&& [mantissa, exponent] = literalRationalType->fractionalDecomposition();
 			solAssert(mantissa && exponent);
 
-			IRVariable mantissaVar(m_context.newYulVariable(), *mantissa);
-			define(mantissaVar) << toCompactHexWithPrefix(mantissa->literalValue(literal)) << "\n";
-			args += convert(mantissaVar, *parameterTypes[0]).stackSlots();
-
-			IRVariable exponentVar(m_context.newYulVariable(), *exponent);
-			define(exponentVar) << toCompactHexWithPrefix(exponent->literalValue(literal)) << "\n";
-			args += convert(exponentVar, *parameterTypes[1]).stackSlots();
+			args.emplace_back(toCompactHexWithPrefix(mantissa->literalValue(literal)));
+			args.emplace_back(toCompactHexWithPrefix(exponent->literalValue(literal)));
 		}
 		else
 		{
