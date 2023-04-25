@@ -1021,10 +1021,10 @@ public:
 	) const override;
 
 private:
-	StateMutability m_stateMutability;
-	bool m_free;
-	Token const m_kind;
-	bool m_usableAsSuffix;
+	StateMutability m_stateMutability{};
+	bool m_free{};
+	Token const m_kind{};
+	bool m_usableAsSuffix{};
 	std::vector<ASTPointer<ModifierInvocation>> m_functionModifiers;
 	ASTPointer<Block> m_body;
 };
