@@ -1003,17 +1003,7 @@ void IRGeneratorForStatements::endVisit(FunctionCall const& _functionCall)
 		vector<string> args;
 		FunctionDefinition const* functionDef = nullptr;
 
-		if (!_functionCall.isSuffixCall() || parameterTypes.size() == 1)
-		{
-			functionDef = ASTNode::resolveFunctionCall(_functionCall, &m_context.mostDerivedContract());
-
-			if (functionType->hasBoundFirstArgument())
-				args += IRVariable(_functionCall.expression()).part("self").stackSlots();
-
-			for (size_t i = 0; i < arguments.size(); ++i)
-				args += convert(*arguments[i], *parameterTypes[i]).stackSlots();
-		}
-		else
+		if (_functionCall.isSuffixCall() && parameterTypes.size() != 1)
 		{
 			functionDef = dynamic_cast<FunctionDefinition const*>(&functionType->declaration());
 			solAssert(functionDef);
@@ -1039,6 +1029,16 @@ void IRGeneratorForStatements::endVisit(FunctionCall const& _functionCall)
 			IRVariable exponentVar(m_context.newYulVariable(), *exponent);
 			define(exponentVar) << toCompactHexWithPrefix(exponent->literalValue(literal)) << "\n";
 			args += convert(exponentVar, *parameterTypes[1]).stackSlots();
+		}
+		else
+		{
+			functionDef = ASTNode::resolveFunctionCall(_functionCall, &m_context.mostDerivedContract());
+
+			if (functionType->hasBoundFirstArgument())
+				args += IRVariable(_functionCall.expression()).part("self").stackSlots();
+
+			for (size_t i = 0; i < arguments.size(); ++i)
+				args += convert(*arguments[i], *parameterTypes[i]).stackSlots();
 		}
 
 		if (functionDef)
