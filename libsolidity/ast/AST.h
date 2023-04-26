@@ -2195,7 +2195,7 @@ private:
 	std::vector<ASTPointer<Expression>> m_arguments;
 	std::vector<ASTPointer<ASTString>> m_names;
 	std::vector<SourceLocation> m_nameLocations;
-	bool m_isSuffixCall;
+	bool m_isSuffixCall{};
 };
 
 /**
