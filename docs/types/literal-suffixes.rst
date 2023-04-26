@@ -262,8 +262,8 @@ For example:
   and ``exponent`` is ``0``.
 - ``1.23`` is decomposed into ``123 * 10**-2``, not ``1.23 * 10**-0`` or ``123000 * 10**-5``.
 
-  In general, when the suffix is invoked on a fractional number, ``exponent`` is the negation of
-  the lowest negative power of ``10`` that, when multiplied by the literal, produces an integer value.
+  In general, when the suffix is invoked on a fractional number, ``exponent`` is the exponent of the
+  lowest positive power of ``10`` that multiplied by the literal produces an integer value.
   ``mantissa`` is the result of that multiplication.
 
 ``exponent`` is never negative and therefore must have an unsigned integer type.
