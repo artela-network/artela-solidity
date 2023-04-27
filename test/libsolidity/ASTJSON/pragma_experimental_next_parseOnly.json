@@ -1,0 +1,19 @@
+{
+  "absolutePath": "a",
+  "id": 2,
+  "nodeType": "SourceUnit",
+  "nodes":
+  [
+    {
+      "id": 1,
+      "literals":
+      [
+        "experimental",
+        "next"
+      ],
+      "nodeType": "PragmaDirective",
+      "src": "0:25:1"
+    }
+  ],
+  "src": "0:26:1"
+}

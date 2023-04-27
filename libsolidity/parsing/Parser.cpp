@@ -42,6 +42,7 @@
 #include <regex>
 #include <tuple>
 #include <vector>
+#include <iostream>
 
 using namespace std;
 using namespace solidity::langutil;
@@ -91,17 +92,25 @@ ASTPointer<SourceUnit> Parser::parse(CharStream& _charStream)
 	solAssert(!m_insideModifier, "");
 	try
 	{
+		m_experimentalParsingEnabledInCurrentSourceUnit = false;
 		m_recursionDepth = 0;
 		m_scanner = make_shared<Scanner>(_charStream);
 		ASTNodeFactory nodeFactory(*this);
+		bool finishedParsingPragmas = false;
 
 		vector<ASTPointer<ASTNode>> nodes;
 		while (m_scanner->currentToken() != Token::EOS)
 		{
+			// Encountering the first non pragma token indicates that we've finished parsing pragmas
+			// at the beginning of the source unit, and can therefore no longer accept subsequent experimental
+			// next pragmas (all other pragmas are will be accepted though).
+			if (m_scanner->currentToken() != Token::Pragma)
+				finishedParsingPragmas = true;
+
 			switch (m_scanner->currentToken())
 			{
 			case Token::Pragma:
-				nodes.push_back(parsePragmaDirective());
+				nodes.push_back(parsePragmaDirective(finishedParsingPragmas));
 				break;
 			case Token::Import:
 				nodes.push_back(parseImportDirective());
@@ -203,7 +212,7 @@ ASTPointer<StructuredDocumentation> Parser::parseStructuredDocumentation()
 	return nullptr;
 }
 
-ASTPointer<PragmaDirective> Parser::parsePragmaDirective()
+ASTPointer<PragmaDirective> Parser::parsePragmaDirective(bool const _finishedParsingPragmas)
 {
 	RecursionGuard recursionGuard(*this);
 	// pragma anything* ;
@@ -213,6 +222,7 @@ ASTPointer<PragmaDirective> Parser::parsePragmaDirective()
 	expectToken(Token::Pragma);
 	vector<string> literals;
 	vector<Token> tokens;
+
 	do
 	{
 		Token token = m_scanner->currentToken();
@@ -239,6 +249,16 @@ ASTPointer<PragmaDirective> Parser::parsePragmaDirective()
 			vector<Token>(tokens.begin() + 1, tokens.end()),
 			vector<string>(literals.begin() + 1, literals.end())
 		);
+	}
+
+	if (literals.size() >= 2 && literals[0] == "experimental" && literals[1] == "next")
+	{
+		if (_finishedParsingPragmas)
+			fatalParserError(8185_error, "Experimental pragma 'next' can only be set at the beginning of the source unit.");
+		// Will persist unchanged throughout the lifetime of the Parser instance
+		m_experimentalParsingEnabled = true;
+		// Only valid while parsing the current source unit; will be reset to false at the beginning of the next Parser::parse() call
+		m_experimentalParsingEnabledInCurrentSourceUnit = true;
 	}
 
 	return nodeFactory.createNode<PragmaDirective>(tokens, literals);
@@ -2470,6 +2490,16 @@ ASTPointer<ASTString> Parser::getLiteralAndAdvance()
 	ASTPointer<ASTString> identifier = make_shared<ASTString>(m_scanner->currentLiteral());
 	advance();
 	return identifier;
+}
+
+bool Parser::experimentalParsingEnabled() const
+{
+	return m_experimentalParsingEnabled;
+}
+
+bool Parser::experimentalParsingEnabledInCurrentSourceUnit() const
+{
+	return m_experimentalParsingEnabledInCurrentSourceUnit;
 }
 
 }
