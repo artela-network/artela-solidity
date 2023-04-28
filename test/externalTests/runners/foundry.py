@@ -20,8 +20,8 @@
 # ------------------------------------------------------------------------------
 
 import os
-import sys
 import re
+import subprocess
 from pathlib import Path
 from shutil import which
 from string import Template
@@ -32,12 +32,13 @@ from exttest.common import AVAILABLE_PRESETS
 from exttest.common import settings_from_preset, get_solc_short_version
 from exttest.common import TestConfig, TestRunner
 
-# Our scripts/ is not a proper Python package so we need to modify PYTHONPATH to import from it
-# pragma pylint: disable=import-error,wrong-import-position
-SCRIPTS_DIR = Path(__file__).parents[3] / "scripts"
-sys.path.insert(0, str(SCRIPTS_DIR))
 
-from common.shell_command import run_cmd
+def run_forge_command(command: str, env: dict = None):
+    subprocess.run(
+        command.split(),
+        env=env if env is not None else os.environ.copy(),
+        check=True
+    )
 
 
 class FoundryRunner(TestRunner):
@@ -89,7 +90,7 @@ class FoundryRunner(TestRunner):
     @TestRunner.on_local_test_dir
     def clean(self):
         """Clean the build artifacts and cache directories"""
-        run_cmd("forge clean")
+        run_forge_command("forge clean")
 
     @TestRunner.on_local_test_dir
     def compiler_settings(
@@ -141,7 +142,7 @@ class FoundryRunner(TestRunner):
             for profile in profiles:
                 f.write(profile)
 
-        run_cmd("forge install", self.env)
+        run_forge_command("forge install", self.env)
 
     @TestRunner.on_local_test_dir
     def compile(self, solc_version: str, preset: str):
@@ -170,7 +171,7 @@ class FoundryRunner(TestRunner):
         if self.compile_fn is not None:
             self.compile_fn(self.test_dir, self.env)
         else:
-            run_cmd("forge build", self.env)
+            run_forge_command("forge build", self.env)
 
     @TestRunner.on_local_test_dir
     def run_test(self, preset: str):
@@ -179,4 +180,4 @@ class FoundryRunner(TestRunner):
         if self.test_fn is not None:
             self.test_fn(self.test_dir, self.env)
         else:
-            run_cmd("forge test --gas-report", self.env)
+            run_forge_command("forge test --gas-report", self.env)

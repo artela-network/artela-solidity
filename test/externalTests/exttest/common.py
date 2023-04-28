@@ -41,7 +41,6 @@ SCRIPTS_DIR = Path(__file__).parents[3] / "scripts"
 sys.path.insert(0, str(SCRIPTS_DIR))
 
 from common.git_helpers import git, git_commit_hash
-from common.shell_command import run_cmd
 
 SOLC_FULL_VERSION_REGEX = re.compile(r"^[a-zA-Z: ]*(.*)$")
 SOLC_SHORT_VERSION_REGEX = re.compile(r"^([0-9.]+).*\+|\-$")
@@ -246,8 +245,8 @@ def setup_solc(config: TestConfig, test_dir: Path) -> (str, str):
             rmtree(solc_dir / "dist")
             rmtree(solc_dir / "node_modules")
         os.chdir(solc_dir)
-        run_cmd("npm install")
-        run_cmd("npm run build")
+        subprocess.run(["npm", "install"], check=True)
+        subprocess.run(["npm", "run", "build"], check=True)
 
         if mimetypes.guess_type(sc_config.binary_path)[0] != "application/javascript":
             raise WrongBinaryType(
