@@ -42,7 +42,6 @@
 #include <regex>
 #include <tuple>
 #include <vector>
-#include <iostream>
 
 using namespace std;
 using namespace solidity::langutil;
