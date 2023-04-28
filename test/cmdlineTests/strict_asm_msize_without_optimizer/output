@@ -1,0 +1,19 @@
+
+======= strict_asm_msize_without_optimizer/input.yul (EVM) =======
+
+Pretty printed source:
+object "object" {
+    code {
+        let x := mload(0x2000)
+        pop(msize())
+    }
+}
+
+
+Binary representation:
+6120005150
+
+Text representation:
+  0x2000
+  mload
+  pop

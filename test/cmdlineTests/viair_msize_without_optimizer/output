@@ -1,0 +1,165 @@
+
+======= viair_msize_without_optimizer/input.sol:C =======
+EVM assembly:
+    /* "viair_msize_without_optimizer/input.sol":56:368  contract C {... */
+  mstore(0x40, 0x80)
+  jumpi(tag_4, iszero(callvalue))
+  tag_5
+  tag_2
+  jump	// in
+tag_5:
+tag_4:
+  tag_6
+  tag_3
+  jump	// in
+tag_6:
+  tag_7
+  tag_1
+  jump	// in
+tag_7:
+  dataSize(sub_0)
+  dataOffset(sub_0)
+  dup3
+  codecopy
+  dataSize(sub_0)
+  dup2
+  return
+tag_1:
+  0x00
+  mload(0x40)
+  swap1
+  pop
+  swap1
+  jump	// out
+tag_2:
+  0x00
+  dup1
+  revert
+tag_3:
+  jump	// out
+stop
+
+sub_0: assembly {
+        /* "viair_msize_without_optimizer/input.sol":56:368  contract C {... */
+      mstore(0x40, 0x80)
+      jumpi(tag_10, lt(calldatasize, 0x04))
+      tag_11
+      calldataload(0x00)
+      tag_1
+      jump	// in
+    tag_11:
+      dup1
+      0x26121ff0
+      dup2
+      sub
+      tag_12
+      jumpi
+      tag_14
+      tag_7
+      jump	// in
+    tag_14:
+    tag_12:
+      pop
+      pop
+    tag_10:
+      tag_15
+      tag_8
+      jump	// in
+    tag_15:
+      jump(tag_16)
+    tag_1:
+      0x00
+      dup2
+      0xe0
+      shr
+      swap1
+      pop
+      swap2
+      swap1
+      pop
+      jump	// out
+    tag_2:
+      0x00
+      mload(0x40)
+      swap1
+      pop
+      swap1
+      jump	// out
+    tag_3:
+      0x00
+      dup1
+      revert
+    tag_4:
+      0x00
+      dup1
+      revert
+    tag_5:
+      0x00
+      dup2
+      dup4
+      sub
+      slt
+      iszero
+      tag_22
+      jumpi
+      tag_23
+      tag_4
+      jump	// in
+    tag_23:
+    tag_22:
+      pop
+      pop
+      jump	// out
+    tag_6:
+      0x00
+      dup1
+      dup3
+      add
+      swap1
+      pop
+      swap2
+      swap1
+      pop
+      jump	// out
+    tag_7:
+      jumpi(tag_26, iszero(callvalue))
+      tag_27
+      tag_3
+      jump	// in
+    tag_27:
+    tag_26:
+      tag_28
+      calldatasize
+      0x04
+      tag_5
+      jump	// in
+    tag_28:
+      tag_29
+      tag_9
+      jump	// in
+    tag_29:
+      tag_30
+      tag_2
+      jump	// in
+    tag_30:
+      tag_31
+      dup2
+      tag_6
+      jump	// in
+    tag_31:
+      dup2
+      dup2
+      sub
+      dup3
+      return
+    tag_8:
+      0x00
+      dup1
+      revert
+        /* "viair_msize_without_optimizer/input.sol":73:366  function f() pure public {... */
+    tag_9:
+      jump	// out
+    tag_16:
+
+    auxdata: <AUXDATA REMOVED>
+}
