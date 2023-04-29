@@ -3,17 +3,14 @@
 
 Pretty printed source:
 object "object" {
-    code {
-        let x := mload(0x2000)
-        pop(msize())
-    }
+    code { { pop(mload(0x2000)) } }
 }
 
 
 Binary representation:
-6120005150
+6120005100
 
 Text representation:
   0x2000
   mload
-  pop
+  stop

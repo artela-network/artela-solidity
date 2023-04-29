@@ -10,58 +10,42 @@ object "Contract" {
 // optimizationPreset: none
 // ----
 // Assembly:
-//     /* "source":33:54   */
-//   jump(tag_3)
-// tag_1:
-//     /* "source":48:52   */
-//   tag_5
-//     /* "source":50:51   */
-//   0x01
-//     /* "source":48:52   */
-//   tag_2
-//   jump	// in
-// tag_5:
-//     /* "source":33:54   */
-// tag_4:
-//   jump	// out
-//     /* "source":59:104   */
-// tag_2:
-//     /* "source":78:79   */
-//   dup1
-//     /* "source":75:89   */
-//   iszero
-//   tag_7
-//   jumpi
-//     /* "source":82:87   */
-//   pop
-//   jump(tag_6)
-//     /* "source":75:89   */
-// tag_7:
-//     /* "source":90:102   */
-//   tag_8
-//     /* "source":99:100   */
-//   0x02
-//     /* "source":96:97   */
-//   dup3
-//     /* "source":92:101   */
-//   add
-//     /* "source":90:102   */
-//   tag_2
-//   jump	// in
-// tag_8:
-//     /* "source":59:104   */
-//   pop
-// tag_6:
-//   jump	// out
-// tag_3:
 //     /* "source":109:113   */
-//   tag_9
+//   tag_2
 //     /* "source":111:112   */
 //   0x01
 //     /* "source":109:113   */
-//   tag_2
+//   tag_1
 //   jump	// in
-// tag_9:
-// Bytecode: 6026565b600b6001600e565b5b565b8015601857506024565b602260028201600e565b505b565b602e6001600e565b
-// Opcodes: PUSH1 0x26 JUMP JUMPDEST PUSH1 0xB PUSH1 0x1 PUSH1 0xE JUMP JUMPDEST JUMPDEST JUMP JUMPDEST DUP1 ISZERO PUSH1 0x18 JUMPI POP PUSH1 0x24 JUMP JUMPDEST PUSH1 0x22 PUSH1 0x2 DUP3 ADD PUSH1 0xE JUMP JUMPDEST POP JUMPDEST JUMP JUMPDEST PUSH1 0x2E PUSH1 0x1 PUSH1 0xE JUMP JUMPDEST
-// SourceMappings: 33:21:0:-:0;;;48:4;50:1;48:4;:::i;:::-;33:21;:::o;59:45::-;78:1;75:14;;;82:5;;;75:14;90:12;99:1;96;92:9;90:12;:::i;:::-;59:45;;:::o;:::-;109:4;111:1;109:4;:::i;:::-
+// tag_2:
+//     /* "source":27:117   */
+//   stop
+//     /* "source":59:104   */
+// tag_1:
+//   dup1
+//     /* "source":75:89   */
+//   tag_3
+//   jumpi
+//     /* "source":73:104   */
+// tag_4:
+//     /* "source":99:100   */
+//   0x02
+//     /* "source":90:102   */
+//   tag_5
+//     /* "source":92:101   */
+//   swap2
+//   add
+//     /* "source":90:102   */
+//   tag_1
+//   jump	// in
+// tag_5:
+//     /* "source":59:104   */
+//   jump	// out
+//     /* "source":80:89   */
+// tag_3:
+//     /* "source":82:87   */
+//   pop
+//   jump	// out
+// Bytecode: 600760016009565b005b80601a575b6002601891016009565b565b5056
+// Opcodes: PUSH1 0x7 PUSH1 0x1 PUSH1 0x9 JUMP JUMPDEST STOP JUMPDEST DUP1 PUSH1 0x1A JUMPI JUMPDEST PUSH1 0x2 PUSH1 0x18 SWAP2 ADD PUSH1 0x9 JUMP JUMPDEST JUMP JUMPDEST POP JUMP
+// SourceMappings: 109:4:0:-:0;111:1;109:4;:::i;:::-;27:90;59:45;;75:14;;73:31;99:1;90:12;92:9;;90:12;:::i;:::-;59:45::o;80:9::-;82:5;:::o
