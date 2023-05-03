@@ -29,6 +29,7 @@
 #include <range/v3/view/iota.hpp>
 #include <range/v3/view/reverse.hpp>
 #include <range/v3/view/take.hpp>
+#include <range/v3/view/transform.hpp>
 
 namespace solidity::yul
 {
@@ -388,31 +389,71 @@ private:
 template<typename Swap, typename PushOrDup, typename Pop>
 void createStackLayout(Stack& _currentStack, Stack const& _targetStack, Swap _swap, PushOrDup _pushOrDup, Pop _pop)
 {
+	std::vector<StackSlot> indexedSlots;
+	size_t junkIndex = std::numeric_limits<size_t>::max();
+	std::map<StackSlot, size_t> indexer;
+	for (Stack const* stack: { &_targetStack, const_cast<Stack const*>(&_currentStack) })
+		for (auto const& slot: *stack)
+			if (
+				auto [element, newlyInserted] = indexer.emplace(slot, 0);
+				newlyInserted
+			)
+			{
+				element->second = indexedSlots.size();
+				if (std::holds_alternative<JunkSlot>(element->first))
+					junkIndex = indexedSlots.size();
+				indexedSlots.push_back(element->first);
+			}
+
+	using IndexedStack = std::vector<size_t>;
+	auto indexTransform = ranges::views::transform([&](auto const& _slot) { return indexer.at(_slot); });
+	IndexedStack _currentStackIndexed = _currentStack | indexTransform | ranges::to<IndexedStack>;
+	IndexedStack _targetStackIndexed = _targetStack | indexTransform | ranges::to<IndexedStack>;
+
+	auto swapIndexed = [&](unsigned _index) {
+		_swap(_index);
+		std::swap(_currentStack.at(_currentStack.size() - _index - 1), _currentStack.back());
+	};
+	auto pushOrDupIndexed = [&](size_t _index) {
+		_pushOrDup(indexedSlots.at(_index));
+		_currentStack.push_back(indexedSlots.at(_index));
+	};
+	auto popIndexed = [&]() {
+		_pop();
+		_currentStack.pop_back();
+	};
+
+
 	struct ShuffleOperations
 	{
-		Stack& currentStack;
-		Stack const& targetStack;
-		Swap swapCallback;
-		PushOrDup pushOrDupCallback;
-		Pop popCallback;
-		std::map<StackSlot, int> multiplicity;
+		IndexedStack& currentStack;
+		IndexedStack const& targetStack;
+		decltype(swapIndexed) swapCallback;
+		decltype(pushOrDupIndexed) pushOrDupCallback;
+		decltype(popIndexed) popCallback;
+		std::vector<int> multiplicity;
+		size_t junkIndex = std::numeric_limits<size_t>::max();
 		ShuffleOperations(
-			Stack& _currentStack,
-			Stack const& _targetStack,
-			Swap _swap,
-			PushOrDup _pushOrDup,
-			Pop _pop
+			IndexedStack& _currentStack,
+			IndexedStack const& _targetStack,
+			decltype(swapIndexed) _swap,
+			decltype(pushOrDupIndexed) _pushOrDup,
+			decltype(popIndexed) _pop,
+			size_t _numSlots,
+			size_t _junkIndex
 		):
 			currentStack(_currentStack),
 			targetStack(_targetStack),
 			swapCallback(_swap),
 			pushOrDupCallback(_pushOrDup),
-			popCallback(_pop)
+			popCallback(_pop),
+			junkIndex(_junkIndex)
 		{
+			multiplicity.resize(_numSlots, 0);
 			for (auto const& slot: currentStack)
 				--multiplicity[slot];
 			for (auto&& [offset, slot]: targetStack | ranges::views::enumerate)
-				if (std::holds_alternative<JunkSlot>(slot) && offset < currentStack.size())
+				if (slot == _junkIndex && offset < currentStack.size())
 					++multiplicity[currentStack.at(offset)];
 				else
 					++multiplicity[slot];
@@ -423,7 +464,7 @@ void createStackLayout(Stack& _currentStack, Stack const& _targetStack, Swap _sw
 				_source < currentStack.size() &&
 				_target < targetStack.size() &&
 				(
-					std::holds_alternative<JunkSlot>(targetStack.at(_target)) ||
+					junkIndex == targetStack.at(_target) ||
 					currentStack.at(_source) == targetStack.at(_target)
 				);
 		}
@@ -432,7 +473,7 @@ void createStackLayout(Stack& _currentStack, Stack const& _targetStack, Swap _sw
 		int targetMultiplicity(size_t _offset) { return multiplicity.at(targetStack.at(_offset)); }
 		bool targetIsArbitrary(size_t offset)
 		{
-			return offset < targetStack.size() && std::holds_alternative<JunkSlot>(targetStack.at(offset));
+			return offset < targetStack.size() && junkIndex == targetStack.at(offset);
 		}
 		void swap(size_t _i)
 		{
@@ -454,7 +495,15 @@ void createStackLayout(Stack& _currentStack, Stack const& _targetStack, Swap _sw
 		}
 	};
 
-	Shuffler<ShuffleOperations>::shuffle(_currentStack, _targetStack, _swap, _pushOrDup, _pop);
+	Shuffler<ShuffleOperations>::shuffle(
+		_currentStackIndexed,
+		_targetStackIndexed,
+		swapIndexed,
+		pushOrDupIndexed,
+		popIndexed,
+		indexedSlots.size(),
+		junkIndex
+	);
 
 	yulAssert(_currentStack.size() == _targetStack.size(), "");
 	for (auto&& [current, target]: ranges::zip_view(_currentStack, _targetStack))
