@@ -15,6 +15,7 @@ Compiler Features:
  * SMTChecker: Properties that are proved safe are now reported explicitly at the end of the analysis. By default, only the number of safe properties is shown. The CLI option ``--model-checker-show-proved-safe`` and the JSON option ``settings.modelChecker.showProvedSafe`` can be enabled to show the full list of safe properties.
  * SMTChecker: Group all messages about unsupported language features in a single warning. The CLI option ``--model-checker-show-unsupported`` and the JSON option ``settings.modelChecker.showUnsupported`` can be enabled to show the full list.
  * Yul EVM Code Transform: If available, use ``push0`` instead of ``codesize`` to produce an arbitrary value on stack in order to create equal stack heights between branches.
+ * Yul IR Code Generation: Cheaper code for reverting with errors of a static small encoding size.
 
 
 Bugfixes:

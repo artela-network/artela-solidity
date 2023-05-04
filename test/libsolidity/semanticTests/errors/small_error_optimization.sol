@@ -14,6 +14,6 @@ contract B {
 }
 // ----
 // f() -> FAILURE, hex"92bbf6e8"
-// gas irOptimized: 274265
+// gas irOptimized: 270934
 // gas legacy: 310592
 // gas legacyOptimized: 273662
