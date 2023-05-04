@@ -6,6 +6,7 @@
             "ast":
             {
                 "absolutePath": "/lib/L.sol",
+                "experimentalParsingEnabled": false,
                 "id": 2,
                 "license": "GPL-2.0",
                 "nodeType": "SourceUnit",
@@ -32,6 +33,7 @@
             "ast":
             {
                 "absolutePath": "/project/../C.sol",
+                "experimentalParsingEnabled": false,
                 "id": 5,
                 "license": "GPL-2.0",
                 "nodeType": "SourceUnit",

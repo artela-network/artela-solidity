@@ -1,5 +1,6 @@
 {
   "absolutePath": "a",
+  "experimentalParsingEnabled": false,
   "exportedSymbols":
   {
     "Color":

@@ -48,8 +48,6 @@ public:
 	{}
 
 	ASTPointer<SourceUnit> parse(langutil::CharStream& _charStream);
-	bool experimentalParsingEnabled() const;
-	bool experimentalParsingEnabledInCurrentSourceUnit() const;
 
 private:
 	class ASTNodeFactory;
@@ -91,7 +89,7 @@ private:
 	///@name Parsing functions for the AST nodes
 	void parsePragmaVersion(langutil::SourceLocation const& _location, std::vector<Token> const& _tokens, std::vector<std::string> const& _literals);
 	ASTPointer<StructuredDocumentation> parseStructuredDocumentation();
-	ASTPointer<PragmaDirective> parsePragmaDirective(bool const _finishedParsingPragmas);
+	ASTPointer<PragmaDirective> parsePragmaDirective(bool _finishedParsingPragmas);
 	ASTPointer<ImportDirective> parseImportDirective();
 	/// @returns an std::pair<ContractKind, bool>, where
 	/// result.second is set to true, if an abstract contract was parsed, false otherwise.
@@ -229,8 +227,6 @@ private:
 	langutil::EVMVersion m_evmVersion;
 	/// Counter for the next AST node ID
 	int64_t m_currentNodeID = 0;
-	/// Flag that indicates whether experimental parsing mode is enabled
-	bool m_experimentalParsingEnabled = false;
 	/// Flag that indicates whether experimental parsing mode is enabled in the current source unit
 	bool m_experimentalParsingEnabledInCurrentSourceUnit = false;
 };

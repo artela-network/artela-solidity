@@ -49,6 +49,7 @@
             "ast":
             {
                 "absolutePath": "A",
+                "experimentalParsingEnabled": false,
                 "exportedSymbols":
                 {
                     "Errort6":

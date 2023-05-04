@@ -91,11 +91,11 @@ ASTPointer<SourceUnit> Parser::parse(CharStream& _charStream)
 	solAssert(!m_insideModifier, "");
 	try
 	{
-		m_experimentalParsingEnabledInCurrentSourceUnit = false;
 		m_recursionDepth = 0;
 		m_scanner = make_shared<Scanner>(_charStream);
 		ASTNodeFactory nodeFactory(*this);
 		bool finishedParsingPragmas = false;
+		m_experimentalParsingEnabledInCurrentSourceUnit = false;
 
 		vector<ASTPointer<ASTNode>> nodes;
 		while (m_scanner->currentToken() != Token::EOS)
@@ -158,7 +158,7 @@ ASTPointer<SourceUnit> Parser::parse(CharStream& _charStream)
 			}
 		}
 		solAssert(m_recursionDepth == 0, "");
-		return nodeFactory.createNode<SourceUnit>(findLicenseString(nodes), nodes);
+		return nodeFactory.createNode<SourceUnit>(findLicenseString(nodes), nodes, m_experimentalParsingEnabledInCurrentSourceUnit);
 	}
 	catch (FatalError const&)
 	{
@@ -254,9 +254,6 @@ ASTPointer<PragmaDirective> Parser::parsePragmaDirective(bool const _finishedPar
 	{
 		if (_finishedParsingPragmas)
 			fatalParserError(8185_error, "Experimental pragma 'next' can only be set at the beginning of the source unit.");
-		// Will persist unchanged throughout the lifetime of the Parser instance
-		m_experimentalParsingEnabled = true;
-		// Only valid while parsing the current source unit; will be reset to false at the beginning of the next Parser::parse() call
 		m_experimentalParsingEnabledInCurrentSourceUnit = true;
 	}
 
@@ -2489,16 +2486,6 @@ ASTPointer<ASTString> Parser::getLiteralAndAdvance()
 	ASTPointer<ASTString> identifier = make_shared<ASTString>(m_scanner->currentLiteral());
 	advance();
 	return identifier;
-}
-
-bool Parser::experimentalParsingEnabled() const
-{
-	return m_experimentalParsingEnabled;
-}
-
-bool Parser::experimentalParsingEnabledInCurrentSourceUnit() const
-{
-	return m_experimentalParsingEnabledInCurrentSourceUnit;
 }
 
 }

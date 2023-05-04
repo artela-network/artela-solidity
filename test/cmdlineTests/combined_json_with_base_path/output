@@ -15,6 +15,7 @@
       "AST":
       {
         "absolutePath": "combined_json_with_base_path/c.sol",
+        "experimentalParsingEnabled": false,
         "exportedSymbols":
         {
           "C":
@@ -68,6 +69,7 @@
       "AST":
       {
         "absolutePath": "combined_json_with_base_path/input.sol",
+        "experimentalParsingEnabled": false,
         "exportedSymbols":
         {
           "C":

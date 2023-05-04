@@ -6,4 +6,3 @@ contract C is NotExisting.X
 }
 
 // ----
-// failAfter: Parsed
