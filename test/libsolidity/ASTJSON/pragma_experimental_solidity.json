@@ -1,6 +1,7 @@
 {
   "absolutePath": "a",
   "experimentalParsingEnabled": true,
+  "exportedSymbols": {},
   "id": 2,
   "nodeType": "SourceUnit",
   "nodes":
@@ -10,11 +11,11 @@
       "literals":
       [
         "experimental",
-        "next"
+        "solidity"
       ],
       "nodeType": "PragmaDirective",
-      "src": "0:25:1"
+      "src": "0:29:1"
     }
   ],
-  "src": "0:26:1"
+  "src": "0:30:1"
 }

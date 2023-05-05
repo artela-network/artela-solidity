@@ -1227,7 +1227,7 @@ void CompilerStack::resolveImports()
 		if (sourcePair.second.ast && sourcePair.second.ast->experimentalParsingEnabled())
 			for (ASTPointer<ASTNode> const& node: sourcePair.second.ast->nodes())
 				if (PragmaDirective const* pragma = dynamic_cast<PragmaDirective*>(node.get()))
-					if (pragma->literals().size() >=2 && pragma->literals()[0] == "experimental" && pragma->literals()[1] == "next")
+					if (pragma->literals().size() >=2 && pragma->literals()[0] == "experimental" && pragma->literals()[1] == "solidity")
 						experimentalPragmaDirectives.push_back(pragma);
 	}
 
@@ -1236,7 +1236,7 @@ void CompilerStack::resolveImports()
 			m_errorReporter.parserError(
 				2141_error,
 				pragma->location(),
-				"File declares \"pragma solidity next\". If you want to enable the experimental mode, all source units must include the pragma."
+				"File declares \"pragma solidity solidity\". If you want to enable the experimental mode, all source units must include the pragma."
 			);
 
 	swap(m_sourceOrder, sourceOrder);

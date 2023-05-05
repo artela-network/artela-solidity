@@ -101,8 +101,8 @@ ASTPointer<SourceUnit> Parser::parse(CharStream& _charStream)
 		while (m_scanner->currentToken() != Token::EOS)
 		{
 			// Encountering the first non pragma token indicates that we've finished parsing pragmas
-			// at the beginning of the source unit, and can therefore no longer accept subsequent experimental
-			// next pragmas (all other pragmas are will be accepted though).
+			// at the beginning of the source unit, and can therefore no longer accept subsequent "experimental
+			// solidity" pragmas (all other pragmas are will be accepted though).
 			if (m_scanner->currentToken() != Token::Pragma)
 				finishedParsingPragmas = true;
 
@@ -250,10 +250,10 @@ ASTPointer<PragmaDirective> Parser::parsePragmaDirective(bool const _finishedPar
 		);
 	}
 
-	if (literals.size() >= 2 && literals[0] == "experimental" && literals[1] == "next")
+	if (literals.size() >= 2 && literals[0] == "experimental" && literals[1] == "solidity")
 	{
 		if (_finishedParsingPragmas)
-			fatalParserError(8185_error, "Experimental pragma 'next' can only be set at the beginning of the source unit.");
+			fatalParserError(8185_error, "Experimental pragma \"solidity\" can only be set at the beginning of the source unit.");
 		m_experimentalParsingEnabledInCurrentSourceUnit = true;
 	}
 

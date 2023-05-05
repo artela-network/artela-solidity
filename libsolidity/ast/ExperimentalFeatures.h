@@ -33,7 +33,7 @@ enum class ExperimentalFeature
 	SMTChecker,
 	Test,
 	TestOnlyAnalysis,
-	Next
+	Solidity
 };
 
 static std::set<ExperimentalFeature> const ExperimentalFeatureWithoutWarning =
@@ -49,7 +49,7 @@ static std::map<std::string, ExperimentalFeature> const ExperimentalFeatureNames
 	{ "SMTChecker", ExperimentalFeature::SMTChecker },
 	{ "__test", ExperimentalFeature::Test },
 	{ "__testOnlyAnalysis", ExperimentalFeature::TestOnlyAnalysis },
-	{ "next", ExperimentalFeature::Next }
+	{ "solidity", ExperimentalFeature::Solidity }
 };
 
 }
