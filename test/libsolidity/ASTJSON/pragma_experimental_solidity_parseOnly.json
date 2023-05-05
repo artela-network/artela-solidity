@@ -1,6 +1,6 @@
 {
   "absolutePath": "a",
-  "experimentalParsingEnabled": true,
+  "experimentalSolidity": true,
   "id": 2,
   "nodeType": "SourceUnit",
   "nodes":

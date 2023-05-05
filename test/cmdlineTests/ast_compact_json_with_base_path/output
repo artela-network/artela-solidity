@@ -4,7 +4,6 @@ JSON AST (compact format):
 ======= ast_compact_json_with_base_path/c.sol =======
 {
   "absolutePath": "ast_compact_json_with_base_path/c.sol",
-  "experimentalParsingEnabled": false,
   "exportedSymbols":
   {
     "C":
@@ -55,7 +54,6 @@ JSON AST (compact format):
 ======= ast_compact_json_with_base_path/input.sol =======
 {
   "absolutePath": "ast_compact_json_with_base_path/input.sol",
-  "experimentalParsingEnabled": false,
   "exportedSymbols":
   {
     "C":

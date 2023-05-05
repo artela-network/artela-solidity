@@ -6,7 +6,6 @@
             "ast":
             {
                 "absolutePath": "A",
-                "experimentalParsingEnabled": false,
                 "exportedSymbols":
                 {
                     "C":

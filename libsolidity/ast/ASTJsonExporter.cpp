@@ -215,7 +215,7 @@ bool ASTJsonExporter::visit(SourceUnit const& _node)
 	std::vector<pair<string, Json::Value>> attributes = {
 		make_pair("license", _node.licenseString() ? Json::Value(*_node.licenseString()) : Json::nullValue),
 		make_pair("nodes", toJson(_node.nodes())),
-		make_pair("experimentalParsingEnabled", Json::Value(_node.experimentalParsingEnabled()))
+		make_pair("experimentalSolidity", _node.experimentalSolidity() ? Json::Value(_node.experimentalSolidity()) : Json::nullValue)
 	};
 
 	if (_node.annotation().exportedSymbols.set())

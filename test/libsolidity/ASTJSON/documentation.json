@@ -1,7 +1,6 @@
 [
 {
   "absolutePath": "a",
-  "experimentalParsingEnabled": false,
   "exportedSymbols":
   {
     "C":
@@ -46,7 +45,6 @@
 },
 {
   "absolutePath": "b",
-  "experimentalParsingEnabled": false,
   "exportedSymbols":
   {
     "C":
@@ -91,7 +89,6 @@
 },
 {
   "absolutePath": "c",
-  "experimentalParsingEnabled": false,
   "exportedSymbols":
   {
     "C":

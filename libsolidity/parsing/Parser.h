@@ -227,8 +227,8 @@ private:
 	langutil::EVMVersion m_evmVersion;
 	/// Counter for the next AST node ID
 	int64_t m_currentNodeID = 0;
-	/// Flag that indicates whether experimental parsing mode is enabled in the current source unit
-	bool m_experimentalParsingEnabledInCurrentSourceUnit = false;
+	/// Flag that indicates whether experimental mode is enabled in the current source unit
+	bool m_experimentalSolidityEnabledInCurrentSourceUnit = false;
 };
 
 }

@@ -1,7 +1,6 @@
 [
 {
   "absolutePath": "a",
-  "experimentalParsingEnabled": false,
   "id": 3,
   "nodeType": "SourceUnit",
   "nodes":
@@ -32,7 +31,6 @@
 },
 {
   "absolutePath": "b",
-  "experimentalParsingEnabled": false,
   "id": 6,
   "nodeType": "SourceUnit",
   "nodes":
@@ -63,7 +61,6 @@
 },
 {
   "absolutePath": "c",
-  "experimentalParsingEnabled": false,
   "id": 24,
   "nodeType": "SourceUnit",
   "nodes":

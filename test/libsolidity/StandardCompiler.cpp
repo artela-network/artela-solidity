@@ -484,7 +484,7 @@ BOOST_AUTO_TEST_CASE(basic_compilation)
 	BOOST_CHECK(result["sources"]["fileA"]["ast"].isObject());
 	BOOST_CHECK_EQUAL(
 		util::jsonCompactPrint(result["sources"]["fileA"]["ast"]),
-		"{\"absolutePath\":\"fileA\",\"experimentalParsingEnabled\":false,\"exportedSymbols\":{\"A\":[1]},\"id\":2,\"nodeType\":\"SourceUnit\",\"nodes\":[{\"abstract\":false,"
+		"{\"absolutePath\":\"fileA\",\"exportedSymbols\":{\"A\":[1]},\"id\":2,\"nodeType\":\"SourceUnit\",\"nodes\":[{\"abstract\":false,"
 		"\"baseContracts\":[],\"canonicalName\":\"A\",\"contractDependencies\":[],"
 		"\"contractKind\":\"contract\",\"fullyImplemented\":true,\"id\":1,"
 		"\"linearizedBaseContracts\":[1],\"name\":\"A\",\"nameLocation\":\"9:1:0\",\"nodeType\":\"ContractDefinition\",\"nodes\":[],\"scope\":2,"

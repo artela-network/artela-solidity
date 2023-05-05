@@ -10,7 +10,6 @@
             "AST":
             {
                 "absolutePath": "no_contract_combined_json/input.sol",
-                "experimentalParsingEnabled": false,
                 "exportedSymbols": {},
                 "id": 2,
                 "license": "GPL-3.0",

@@ -1,6 +1,6 @@
 {
   "absolutePath": "a",
-  "experimentalParsingEnabled": true,
+  "experimentalSolidity": true,
   "exportedSymbols": {},
   "id": 2,
   "nodeType": "SourceUnit",

@@ -1224,7 +1224,7 @@ void CompilerStack::resolveImports()
 	{
 		if (isRequestedSource(sourcePair.first))
 			toposort(&sourcePair.second);
-		if (sourcePair.second.ast && sourcePair.second.ast->experimentalParsingEnabled())
+		if (sourcePair.second.ast && sourcePair.second.ast->experimentalSolidity())
 			for (ASTPointer<ASTNode> const& node: sourcePair.second.ast->nodes())
 				if (PragmaDirective const* pragma = dynamic_cast<PragmaDirective*>(node.get()))
 					if (pragma->literals().size() >=2 && pragma->literals()[0] == "experimental" && pragma->literals()[1] == "solidity")
@@ -1236,7 +1236,7 @@ void CompilerStack::resolveImports()
 			m_errorReporter.parserError(
 				2141_error,
 				pragma->location(),
-				"File declares \"pragma solidity solidity\". If you want to enable the experimental mode, all source units must include the pragma."
+				"File declares \"pragma experimental solidity\". If you want to enable the experimental mode, all source units must include the pragma."
 			);
 
 	swap(m_sourceOrder, sourceOrder);

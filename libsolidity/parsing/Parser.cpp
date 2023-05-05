@@ -95,7 +95,7 @@ ASTPointer<SourceUnit> Parser::parse(CharStream& _charStream)
 		m_scanner = make_shared<Scanner>(_charStream);
 		ASTNodeFactory nodeFactory(*this);
 		bool finishedParsingPragmas = false;
-		m_experimentalParsingEnabledInCurrentSourceUnit = false;
+		m_experimentalSolidityEnabledInCurrentSourceUnit = false;
 
 		vector<ASTPointer<ASTNode>> nodes;
 		while (m_scanner->currentToken() != Token::EOS)
@@ -158,7 +158,7 @@ ASTPointer<SourceUnit> Parser::parse(CharStream& _charStream)
 			}
 		}
 		solAssert(m_recursionDepth == 0, "");
-		return nodeFactory.createNode<SourceUnit>(findLicenseString(nodes), nodes, m_experimentalParsingEnabledInCurrentSourceUnit);
+		return nodeFactory.createNode<SourceUnit>(findLicenseString(nodes), nodes, m_experimentalSolidityEnabledInCurrentSourceUnit);
 	}
 	catch (FatalError const&)
 	{
@@ -254,7 +254,7 @@ ASTPointer<PragmaDirective> Parser::parsePragmaDirective(bool const _finishedPar
 	{
 		if (_finishedParsingPragmas)
 			fatalParserError(8185_error, "Experimental pragma \"solidity\" can only be set at the beginning of the source unit.");
-		m_experimentalParsingEnabledInCurrentSourceUnit = true;
+		m_experimentalSolidityEnabledInCurrentSourceUnit = true;
 	}
 
 	return nodeFactory.createNode<PragmaDirective>(tokens, literals);
