@@ -10,6 +10,7 @@ Compiler Features:
  * NatSpec: Add support for NatSpec documentation in ``struct`` definitions.
  * NatSpec: Include NatSpec from events that are emitted by a contract but defined outside of it in userdoc and devdoc output.
  * Optimizer: Re-implement simplified version of UnusedAssignEliminator and UnusedStoreEliminator. It can correctly remove some unused assignments in deeply nested loops that were ignored by the old version.
+ * Parser: Introduce ``pragma experimental solidity``, which will be used to enable experimental features in the future, such as the standard library, new parsing behaviour, etc.
  * Parser: Unary plus is no longer recognized as a unary operator in the AST and triggers an error at the parsing stage (rather than later during the analysis).
  * SMTChecker: Properties that are proved safe are now reported explicitly at the end of the analysis. By default, only the number of safe properties is shown. The CLI option ``--model-checker-show-proved-safe`` and the JSON option ``settings.modelChecker.showProvedSafe`` can be enabled to show the full list of safe properties.
  * SMTChecker: Group all messages about unsupported language features in a single warning. The CLI option ``--model-checker-show-unsupported`` and the JSON option ``settings.modelChecker.showUnsupported`` can be enabled to show the full list.
@@ -25,6 +26,7 @@ Bugfixes:
 
 
 AST Changes:
+ * AST: Add the ``experimentalParsingEnabled`` field to the ``SourceUnit`` nodes, which indicate whether the experimental parsing mode has been enabled via ``pragma experimental solidity``.
  * AST: Add the ``internalFunctionID`` field to the AST nodes of functions that may be called via the internal dispatch. These IDs are always generated, but they are only used in via-IR code generation.
  * AST: Add the ``usedEvents`` field to ``ContractDefinition`` which contains the AST IDs of all events emitted by the contract as well as all events defined and inherited by the contract.
 
