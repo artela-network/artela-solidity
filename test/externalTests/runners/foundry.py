@@ -113,7 +113,7 @@ class FoundryRunner(TestRunner):
             )
         )
 
-        # TODO: Add support to solcjs. Currently only native solc is supported.
+        # TODO: Add support to solcjs. Currently only native solc is supported. # pylint: disable=fixme
         if binary_type == "solcjs":
             raise NotImplementedError(
                 "Solcjs binaries are currently not supported with Foundry. Please use `native` binary_type."

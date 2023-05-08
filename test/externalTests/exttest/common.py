@@ -37,8 +37,8 @@ from abc import ABCMeta, abstractmethod
 
 # Our scripts/ is not a proper Python package so we need to modify PYTHONPATH to import from it
 # pragma pylint: disable=import-error,wrong-import-position
-SCRIPTS_DIR = Path(__file__).parents[3] / "scripts"
-sys.path.insert(0, str(SCRIPTS_DIR))
+PROJECT_ROOT = Path(__file__).parents[3]
+sys.path.insert(0, f"{PROJECT_ROOT}/scripts")
 
 from common.git_helpers import git, git_commit_hash
 
@@ -352,6 +352,6 @@ def run_test(name: str, runner: TestRunner):
             else:
                 print("Running test function...")
                 runner.run_test(preset)
-            # TODO: store_benchmark_report
+            # TODO: store_benchmark_report # pylint: disable=fixme
             # runner.clean()
         print("Done.")
