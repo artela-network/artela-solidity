@@ -31,6 +31,43 @@
 #include <range/v3/view/take.hpp>
 #include <range/v3/view/transform.hpp>
 
+#include <boost/unordered/unordered_flat_map.hpp>
+
+namespace std {
+template<>
+struct hash<solidity::yul::FunctionCallReturnLabelSlot>
+{
+	size_t operator()(solidity::yul::FunctionCallReturnLabelSlot const& _slot) const
+	{
+		return std::hash<decltype(&_slot.call.get())>{}(&_slot.call.get());
+	}
+};
+template<>
+struct hash<solidity::yul::VariableSlot>
+{
+	size_t operator()(solidity::yul::VariableSlot const& _slot) const
+	{
+		return std::hash<decltype(&_slot.variable.get())>{}(&_slot.variable.get());
+	}
+};
+template<>
+struct hash<solidity::yul::LiteralSlot>
+{
+	size_t operator()(solidity::yul::LiteralSlot const& _slot) const
+	{
+		return boost::hash<decltype(_slot.value)>{}(_slot.value);
+	}
+};
+template<>
+struct hash<solidity::yul::TemporarySlot>
+{
+	size_t operator()(solidity::yul::TemporarySlot const& _slot) const
+	{
+		return std::hash<decltype(&_slot.call.get())>{}(&_slot.call.get()) ^ std::hash<size_t>{}(_slot.index);
+	}
+};
+}
+
 namespace solidity::yul
 {
 
@@ -378,6 +415,49 @@ private:
 	}
 };
 
+class IndexingMap
+{
+public:
+	size_t operator[](StackSlot const& _slot)
+	{
+		if (auto* p = std::get_if<FunctionCallReturnLabelSlot>(&_slot))
+			return getIndex(m_functionCallReturnLabelSlotIndex, *p);
+		if (std::holds_alternative<FunctionReturnLabelSlot>(_slot))
+		{
+			m_indexedSlots[1] = _slot;
+			return 1;
+		}
+		if (auto* p = std::get_if<VariableSlot>(&_slot))
+			return getIndex(m_variableSlotIndex, *p);
+		if (auto* p = std::get_if<LiteralSlot>(&_slot))
+			return getIndex(m_literalSlotIndex, *p);
+		if (auto* p = std::get_if<TemporarySlot>(&_slot))
+			return getIndex(m_temporarySlotIndex, *p);
+		m_indexedSlots[0] = _slot;
+		return 0;
+	}
+	std::vector<StackSlot> indexedSlots()
+	{
+		return std::move(m_indexedSlots);
+	}
+private:
+	template<typename MapType, typename ElementType>
+	size_t getIndex(MapType&& _map, ElementType&& _element)
+	{
+		auto [element, newlyInserted] = _map.emplace(std::make_pair(_element, size_t(0u)));
+		if (newlyInserted)
+		{
+			element->second = m_indexedSlots.size();
+			m_indexedSlots.emplace_back(_element);
+		}
+		return element->second;
+	}
+	boost::unordered_flat_map<FunctionCallReturnLabelSlot, size_t, std::hash<FunctionCallReturnLabelSlot>> m_functionCallReturnLabelSlotIndex;
+	boost::unordered_flat_map<VariableSlot, size_t, std::hash<VariableSlot>> m_variableSlotIndex;
+	boost::unordered_flat_map<LiteralSlot, size_t, std::hash<LiteralSlot>> m_literalSlotIndex;
+	boost::unordered_flat_map<TemporarySlot, size_t, std::hash<TemporarySlot>> m_temporarySlotIndex;
+	std::vector<StackSlot> m_indexedSlots{JunkSlot{}, JunkSlot{}};
+};
 
 /// Transforms @a _currentStack to @a _targetStack, invoking the provided shuffling operations.
 /// Modifies @a _currentStack itself after each invocation of the shuffling operations.
@@ -390,25 +470,13 @@ template<typename Swap, typename PushOrDup, typename Pop>
 void createStackLayout(Stack& _currentStack, Stack const& _targetStack, Swap _swap, PushOrDup _pushOrDup, Pop _pop)
 {
 	std::vector<StackSlot> indexedSlots;
-	size_t junkIndex = std::numeric_limits<size_t>::max();
-	std::map<StackSlot, size_t> indexer;
-	for (Stack const* stack: { &_targetStack, const_cast<Stack const*>(&_currentStack) })
-		for (auto const& slot: *stack)
-			if (
-				auto [element, newlyInserted] = indexer.emplace(slot, 0);
-				newlyInserted
-			)
-			{
-				element->second = indexedSlots.size();
-				if (std::holds_alternative<JunkSlot>(element->first))
-					junkIndex = indexedSlots.size();
-				indexedSlots.push_back(element->first);
-			}
-
 	using IndexedStack = std::vector<size_t>;
-	auto indexTransform = ranges::views::transform([&](auto const& _slot) { return indexer.at(_slot); });
-	IndexedStack _currentStackIndexed = _currentStack | indexTransform | ranges::to<IndexedStack>;
+	size_t junkIndex = 0;
+	IndexingMap indexer;
+	auto indexTransform = ranges::views::transform([&](auto const& _slot) { return indexer[_slot]; });
 	IndexedStack _targetStackIndexed = _targetStack | indexTransform | ranges::to<IndexedStack>;
+	IndexedStack _currentStackIndexed = _currentStack | indexTransform | ranges::to<IndexedStack>;
+	indexedSlots = indexer.indexedSlots();
 
 	auto swapIndexed = [&](unsigned _index) {
 		_swap(_index);

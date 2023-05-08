@@ -463,6 +463,7 @@ void CommandLineParser::parseOutputSelection()
 		) - set<string>{CompilerOutputs::componentName(&CompilerOutputs::ewasmIR)};
 		static set<string> const assemblerModeOutputs = {
 			CompilerOutputs::componentName(&CompilerOutputs::asm_),
+			CompilerOutputs::componentName(&CompilerOutputs::asmJson),
 			CompilerOutputs::componentName(&CompilerOutputs::binary),
 			CompilerOutputs::componentName(&CompilerOutputs::irOptimized),
 			CompilerOutputs::componentName(&CompilerOutputs::ewasm),
@@ -1189,7 +1190,6 @@ void CommandLineParser::processArgs()
 			// TODO: The list is not complete. Add more.
 			g_strOutputDir,
 			g_strGas,
-			g_strCombinedJson,
 			g_strOptimizeYul,
 			g_strNoOptimizeYul,
 		};
