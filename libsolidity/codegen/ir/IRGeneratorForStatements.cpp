@@ -392,6 +392,9 @@ void IRGeneratorForStatements::endVisit(VariableDeclarationStatement const& _var
 		else
 		{
 			VariableDeclaration const& varDecl = *_varDeclStatement.declarations().front();
+			if (varDecl.isStateVariable()) {
+				// TODO: 🐸Cache this declaration, since this may be used in another function / declaration / assignment
+			}
 			define(m_context.addLocalVariable(varDecl), *expression);
 		}
 	}
@@ -475,7 +478,10 @@ bool IRGeneratorForStatements::visit(Assignment const& _assignment)
 	}
 	else
 	{
-		writeToLValue(*m_currentLValue, value);
+		if (holds_alternative<IRLValue::Storage>(m_currentLValue.value().kind))
+			writeToLValueWithJournal(_assignment, *m_currentLValue, value);
+		else
+			writeToLValue(*m_currentLValue, value);
 
 		if (dynamic_cast<ReferenceType const*>(&m_currentLValue->type))
 			define(_assignment, readFromLValue(*m_currentLValue));
@@ -3023,6 +3029,129 @@ void IRGeneratorForStatements::appendAndOrOperatorCode(BinaryOperation const& _b
 	setLocation(_binOp);
 	assign(value, _binOp.rightExpression());
 	appendCode() << "}\n";
+}
+
+void IRGeneratorForStatements::writeToLValueWithJournal(Assignment const& _assignment, IRLValue const& _lvalue, IRVariable const& _value)
+{
+	string journalFunc;
+	if (auto const* identifier = dynamic_cast<Identifier const*>(&_assignment.leftHandSide()))
+	{
+		// direct assign, no nested index / member access
+		// deal with value types (can be stored in 1 storage slot)
+		auto const& storage = get<IRLValue::Storage>(m_currentLValue.value().kind);
+		journalFunc = "journal1(" + storage.slot + ")\n";
+	}
+	else
+	{
+		// indirect access to the original var
+		u256 storageLoc;
+		vector<Type const*> indexTypes;
+		vector<string> indexVars;
+		for (auto* currentExpression = &const_cast<Expression&>(_assignment.leftHandSide());;)
+		{
+			if (auto const* indexAccess = dynamic_cast<IndexAccess const*>(currentExpression))
+			{
+				// handle mapping / array index access
+				auto const* indexExpression = indexAccess->indexExpression();
+				auto const& baseExpression = indexAccess->baseExpression();
+				auto const* baseType = baseExpression.annotation().type;
+
+				Type const* storageKeyType;
+				if (auto const* mappingType = dynamic_cast<MappingType const*>(baseType))
+					storageKeyType = mappingType->keyType();
+				else if (auto const* arrayType = dynamic_cast<ArrayType const*>(baseType))
+					storageKeyType = TypeProvider::uint256();
+				else
+					solUnimplemented("Unknown base type");
+
+				string indexNameVar = m_context.newYulVariable();
+				appendCode() << "let " << indexNameVar << " := ";
+
+				if (auto const* indexIdentifier = dynamic_cast<Identifier const*>(indexExpression))
+				{
+					// handle variable index
+					auto const* varDeclaration
+						= dynamic_cast<VariableDeclaration const*>(indexIdentifier->annotation().referencedDeclaration);
+					solAssert(varDeclaration, "Not variable declaration");
+					auto const& localVar = m_context.localVariable(*varDeclaration);
+
+					solAssert(localVar.type().sizeOnStack() == 1, "");
+					auto const& [itemName, type] = localVar.type().stackItems().front();
+					appendCode() << localVar.suffixedName(itemName) << "\n";
+				}
+				else if (auto const* indexLiteral = dynamic_cast<Literal const*>(indexExpression))
+				{
+					// handle literal index
+					appendCode()
+						<< m_utils.conversionFunction(*indexExpression->annotation().type, *storageKeyType)
+						<< "()\n";
+				}
+				else
+				{
+					// TODO: 🐸 Handle function index like type conversion
+					solUnimplemented("Unable to handle this kind of index");
+				}
+
+				indexVars.emplace_back(indexNameVar);
+				indexTypes.emplace_back(indexExpression->annotation().type);
+				currentExpression = &const_cast<Expression&>(indexAccess->baseExpression());
+			}
+			else if (auto const* memberAccess = dynamic_cast<MemberAccess const*>(currentExpression))
+			{
+				// handle field member access
+				string memberNameVar = m_context.newYulVariable();
+				appendCode() << "let " << memberNameVar << " := "
+							 << m_utils.copyLiteralToMemoryFunction(memberAccess->memberName()) << "();\n";
+
+				indexVars.emplace_back(memberNameVar);
+				indexTypes.emplace_back(TypeProvider::stringLiteral(memberAccess->memberName()));
+				currentExpression = &const_cast<Expression&>(memberAccess->expression());
+			}
+			else if (auto const* baseIdentifier = dynamic_cast<Identifier*>(currentExpression))
+			{
+				// save the storage location of state variable
+				auto const* varDeclaration
+					= dynamic_cast<VariableDeclaration const*>(baseIdentifier->annotation().referencedDeclaration);
+				solAssert(varDeclaration, "Not variable declaration");
+
+				// TODO: 🐸this will fail if we have local variable storage pointer assignment, handle it later
+				auto stateVarLoc = m_context.storageLocationOfStateVariable(*varDeclaration);
+				storageLoc = stateVarLoc.first;
+				break;
+			}
+			else
+			{
+				solUnimplemented("Unknown expression type");
+			}
+		}
+
+		// encode all keys with abi.encode, the order of the keys are reversed
+		string const encodeFunc = ABIFunctions(m_context.evmVersion(), m_context.revertStrings(), m_context.functionCollector())
+									  .tupleEncoder(
+										  indexTypes,
+										  indexTypes
+									  );
+
+		string keyMemPtr = m_context.newYulVariable();
+		appendCode() << "let " << keyMemPtr << " := " << m_utils.allocateUnboundedFunction() << "()\n";
+
+		string start = m_context.newYulVariable();
+		appendCode() << "let " << start << " := add(" << keyMemPtr << ", 0x20)\n";
+
+		string end = m_context.newYulVariable();
+		appendCode() << "let " << end << " := "
+					 << encodeFunc << "(" << start << ", " << solidity::util::joinHumanReadable(indexVars) << ")\n";
+
+		appendCode()
+			<< "mstore(" << keyMemPtr << ", sub(" << end <<", " << start << "))\n"
+			<< m_utils.finalizeAllocationFunction() << "(" << keyMemPtr <<", sub(" << end <<", " << keyMemPtr << "))\n";
+
+		journalFunc = "journal2(" + toCompactHexWithPrefix(storageLoc) + ", " + keyMemPtr + ")\n";
+ 	}
+
+	appendCode() << journalFunc;
+	writeToLValue(_lvalue, _value);
+	appendCode() << journalFunc;
 }
 
 void IRGeneratorForStatements::writeToLValue(IRLValue const& _lvalue, IRVariable const& _value)

@@ -78,10 +78,11 @@ public:
 	/// @returns a vector containing the names of the stack slots of the variable.
 	std::vector<std::string> stackSlots() const;
 
-private:
 	/// @returns a name consisting of the base name appended with an underscore and @æ _suffix,
 	/// unless @a _suffix is empty, in which case the base name itself is returned.
 	std::string suffixedName(std::string const& _suffix) const;
+
+private:
 	std::string m_baseName;
 	Type const& m_type;
 };
