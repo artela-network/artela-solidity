@@ -177,6 +177,11 @@ enum class Instruction: uint8_t
 	LOG3,				///< Makes a log entry; 3 topics.
 	LOG4,				///< Makes a log entry; 4 topics.
 
+	CJOURNAL1 = 0xe0,
+	CJOURNAL3,
+	VJOURNAL1,
+	VJOURNAL3,
+
 	CREATE = 0xf0,		///< create a new account with associated code
 	CALL,				///< message-call into an account
 	CALLCODE,			///< message-call with another account's code only
