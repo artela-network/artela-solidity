@@ -3037,6 +3037,8 @@ void IRGeneratorForStatements::writeToLValueWithJournal(Assignment const& _assig
 
 	string journalOpCode;
 	string journalFunc;
+
+	appendCode() << "{\n";
 	if (auto const* identifier = dynamic_cast<Identifier const*>(&_assignment.leftHandSide()))
 	{
 		if (_assignment.rightHandSide().annotation().type->isValueType())
@@ -3086,10 +3088,7 @@ void IRGeneratorForStatements::writeToLValueWithJournal(Assignment const& _assig
 					auto const & indexType = *indexExpression->annotation().type;
 					if (auto const* rationalNumber = dynamic_cast<RationalNumberType const*>(&indexType))
 					{
-						string indexNameVar = m_context.newYulVariable();
-						appendCode() << "let " << indexNameVar << " := "
-									 << toCompactHexWithPrefix(rationalNumber->literalValue(indexLiteral)) << "\n";
-						indexVars.emplace_back(indexNameVar);
+						indexVars.emplace_back(toCompactHexWithPrefix(rationalNumber->literalValue(indexLiteral)));
 					}
 				}
 				else
@@ -3141,7 +3140,7 @@ void IRGeneratorForStatements::writeToLValueWithJournal(Assignment const& _assig
 		string end = m_context.newYulVariable();
 		appendCode() << "let " << end << " := "
 					 << encodeFunc << "(" << start
-					 << (indexVars.size() > 0 ? ", " : "")
+					 << (!indexVars.empty() ? ", " : "")
 					 << solidity::util::joinHumanReadable(indexVars) << ")\n";
 
 		string size = m_context.newYulVariable();
@@ -3156,6 +3155,8 @@ void IRGeneratorForStatements::writeToLValueWithJournal(Assignment const& _assig
 	appendCode() << journalFunc;
 	writeToLValue(_lvalue, _value);
 	appendCode() << journalFunc;
+
+	appendCode() << "}\n";
 }
 
 void IRGeneratorForStatements::writeToLValue(IRLValue const& _lvalue, IRVariable const& _value)
