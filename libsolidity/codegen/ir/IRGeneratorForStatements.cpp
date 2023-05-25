@@ -3051,9 +3051,9 @@ void IRGeneratorForStatements::writeToLValueWithJournal(Assignment const& _assig
 	else
 	{
 		if (_assignment.rightHandSide().annotation().type->isValueType())
-			journalOpCode = "cjournal3";
+			journalOpCode = "cjournal4";
 		else
-			journalOpCode = "vjournal3";
+			journalOpCode = "vjournal4";
 
 		// indirect access to the original var
 		u256 storageLoc;
@@ -3144,11 +3144,13 @@ void IRGeneratorForStatements::writeToLValueWithJournal(Assignment const& _assig
 					 << (indexVars.size() > 0 ? ", " : "")
 					 << solidity::util::joinHumanReadable(indexVars) << ")\n";
 
+		string size = m_context.newYulVariable();
 		appendCode()
+			<< "let " << size << " := sub(" << end << ", " << keyMemPtr << ")\n"
 			<< "mstore(" << keyMemPtr << ", sub(" << end <<", " << start << "))\n"
-			<< m_utils.finalizeAllocationFunction() << "(" << keyMemPtr <<", sub(" << end <<", " << keyMemPtr << "))\n";
+			<< m_utils.finalizeAllocationFunction() << "(" << keyMemPtr <<", " << size << ")\n";
 
-		journalFunc = journalOpCode + "(" + toCompactHexWithPrefix(storageLoc) + ", " + storage.slot + ", " + keyMemPtr + ")\n";
+		journalFunc = journalOpCode + "(" + toCompactHexWithPrefix(storageLoc) + ", " + storage.slot + ", " + keyMemPtr + ", " + size + ")\n";
  	}
 
 	appendCode() << journalFunc;
