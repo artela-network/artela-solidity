@@ -315,6 +315,13 @@ u256 EVMInstructionInterpreter::eval(
 		accessMemory(arg[0], arg[1]);
 		logTrace(_instruction, arg);
 		return 0;
+	// --------------- monitor ---------------
+	// TODO: 🐸 Implement this later
+	case Instruction::CJOURNAL1:
+	case Instruction::CJOURNAL4:
+	case Instruction::VJOURNAL1:
+	case Instruction::VJOURNAL4:
+		return 0;
 	// --------------- calls ---------------
 	case Instruction::CREATE:
 		accessMemory(arg[1], arg[2]);
