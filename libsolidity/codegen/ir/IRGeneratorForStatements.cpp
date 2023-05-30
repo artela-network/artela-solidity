@@ -3034,6 +3034,20 @@ void IRGeneratorForStatements::appendAndOrOperatorCode(BinaryOperation const& _b
 void IRGeneratorForStatements::writeToLValueWithJournal(Assignment const& _assignment, IRLValue const& _lvalue, IRVariable const& _value)
 {
 	auto const& storage = get<IRLValue::Storage>(m_currentLValue.value().kind);
+	auto const& calcStateVarNameMemLen = [&](StringLiteralType const* stringLiteral) {
+		return toCompactHexWithPrefix(32 + stringLiteral->value().size());
+	};
+	auto const& saveStateVarNameToMem = [&](StringLiteralType const* stateVarNameLiteral) {
+		string stateVarName = m_context.newYulVariable();
+
+		appendCode() << "let " << stateVarName << " := "
+					 << m_utils.conversionFunction(*stateVarNameLiteral, *TypeProvider::stringMemory()) << "()\n";
+		return stateVarName;
+	};
+	auto const& getStateVarContract = [&](Identifier const* identifier) {
+		auto scope = dynamic_cast<ScopableAnnotation const*>(&identifier->annotation().referencedDeclaration->annotation());
+		return scope->contract;
+	};
 
 	string journalOpCode;
 	string journalFunc;
@@ -3041,24 +3055,30 @@ void IRGeneratorForStatements::writeToLValueWithJournal(Assignment const& _assig
 	appendCode() << "{\n";
 	if (auto const* identifier = dynamic_cast<Identifier const*>(&_assignment.leftHandSide()))
 	{
+		StringLiteralType const* stateVarNameLiteral = TypeProvider::stringLiteral(
+			getStateVarContract(identifier)->name() + "." + identifier->name());
 		if (_assignment.rightHandSide().annotation().type->isValueType())
-			journalOpCode = "cjournal1";
+			journalOpCode = "cjournal3";
 		else
-			journalOpCode = "vjournal1";
+			journalOpCode = "vjournal3";
 
 		// direct assign, no nested index / member access
 		// deal with value types (can be stored in 1 storage slot)
-		journalFunc = journalOpCode + "(" + storage.slot + ")\n";
+		journalFunc = journalOpCode + "(" + storage.slot +
+					  ", " + calcStateVarNameMemLen(stateVarNameLiteral) +
+					  ", " + saveStateVarNameToMem(stateVarNameLiteral) + ")\n";
 	}
 	else
 	{
 		if (_assignment.rightHandSide().annotation().type->isValueType())
-			journalOpCode = "cjournal4";
+			journalOpCode = "cjournal5";
 		else
-			journalOpCode = "vjournal4";
+			journalOpCode = "vjournal5";
 
 		// indirect access to the original var
 		u256 storageLoc;
+		string stateVarName;
+		string stateVarNameLen;
 		vector<Type const*> indexTypes;
 		vector<string> indexVars;
 		for (auto* currentExpression = &const_cast<Expression&>(_assignment.leftHandSide());;)
@@ -3116,6 +3136,11 @@ void IRGeneratorForStatements::writeToLValueWithJournal(Assignment const& _assig
 				// TODO: 🐸this will fail if we have local variable storage pointer assignment, handle it later
 				auto stateVarLoc = m_context.storageLocationOfStateVariable(*varDeclaration);
 				storageLoc = stateVarLoc.first;
+
+				StringLiteralType const* stateVarNameLiteral =
+					TypeProvider::stringLiteral(getStateVarContract(identifier)->name() + "." + baseIdentifier->name());
+				stateVarNameLen = calcStateVarNameMemLen(stateVarNameLiteral);
+				stateVarName = saveStateVarNameToMem(stateVarNameLiteral);
 				break;
 			}
 			else
@@ -3145,11 +3170,16 @@ void IRGeneratorForStatements::writeToLValueWithJournal(Assignment const& _assig
 
 		string size = m_context.newYulVariable();
 		appendCode()
-			<< "let " << size << " := sub(" << end << ", " << keyMemPtr << ")\n"
+			<< "let " << size << " := add(sub(" << end << ", " << keyMemPtr << "), " << stateVarNameLen << ")\n"
 			<< "mstore(" << keyMemPtr << ", sub(" << end <<", " << start << "))\n"
 			<< m_utils.finalizeAllocationFunction() << "(" << keyMemPtr <<", " << size << ")\n";
 
-		journalFunc = journalOpCode + "(" + toCompactHexWithPrefix(storageLoc) + ", " + storage.slot + ", " + keyMemPtr + ", " + size + ")\n";
+		string variableName =
+		journalFunc = journalOpCode + "(" + toCompactHexWithPrefix(storageLoc) +
+						  ", " + size +
+						  ", " + stateVarName +
+						  ", " + storage.slot +
+						  ", " + keyMemPtr + ")\n";
  	}
 
 	appendCode() << journalFunc;

@@ -317,10 +317,10 @@ u256 EVMInstructionInterpreter::eval(
 		return 0;
 	// --------------- monitor ---------------
 	// TODO: 🐸 Implement this later
-	case Instruction::CJOURNAL1:
-	case Instruction::CJOURNAL4:
-	case Instruction::VJOURNAL1:
-	case Instruction::VJOURNAL4:
+	case Instruction::CJOURNAL3:
+	case Instruction::CJOURNAL5:
+	case Instruction::VJOURNAL3:
+	case Instruction::VJOURNAL5:
 		return 0;
 	// --------------- calls ---------------
 	case Instruction::CREATE:
