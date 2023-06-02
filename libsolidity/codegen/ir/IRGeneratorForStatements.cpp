@@ -3138,7 +3138,7 @@ void IRGeneratorForStatements::writeToLValueWithJournal(Assignment const& _assig
 				storageLoc = stateVarLoc.first;
 
 				StringLiteralType const* stateVarNameLiteral =
-					TypeProvider::stringLiteral(getStateVarContract(identifier)->name() + "." + baseIdentifier->name());
+					TypeProvider::stringLiteral(getStateVarContract(baseIdentifier)->name() + "." + baseIdentifier->name());
 				stateVarNameLen = calcStateVarNameMemLen(stateVarNameLiteral);
 				stateVarName = saveStateVarNameToMem(stateVarNameLiteral);
 				break;
