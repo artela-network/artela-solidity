@@ -3034,153 +3034,138 @@ void IRGeneratorForStatements::appendAndOrOperatorCode(BinaryOperation const& _b
 void IRGeneratorForStatements::writeToLValueWithJournal(Assignment const& _assignment, IRLValue const& _lvalue, IRVariable const& _value)
 {
 	auto const& storage = get<IRLValue::Storage>(m_currentLValue.value().kind);
-	auto const& calcStateVarNameMemLen = [&](StringLiteralType const* stringLiteral) {
-		return toCompactHexWithPrefix(32 + stringLiteral->value().size());
-	};
-	auto const& saveStateVarNameToMem = [&](StringLiteralType const* stateVarNameLiteral) {
-		string stateVarName = m_context.newYulVariable();
 
-		appendCode() << "let " << stateVarName << " := "
-					 << m_utils.conversionFunction(*stateVarNameLiteral, *TypeProvider::stringMemory()) << "()\n";
-		return stateVarName;
-	};
-	auto const& getStateVarContract = [&](Identifier const* identifier) {
-		auto scope = dynamic_cast<ScopableAnnotation const*>(&identifier->annotation().referencedDeclaration->annotation());
-		return scope->contract;
-	};
-
-	string journalOpCode;
 	string journalFunc;
+	auto const* valueType = _assignment.rightHandSide().annotation().type;
 
 	appendCode() << "{\n";
-	if (auto const* identifier = dynamic_cast<Identifier const*>(&_assignment.leftHandSide()))
+	// indirect access to the original var
+	vector<Type const*> indexTypes;
+	vector<string> indexVars;
+	for (auto* currentExpression = &const_cast<Expression&>(_assignment.leftHandSide());;)
 	{
-		StringLiteralType const* stateVarNameLiteral = TypeProvider::stringLiteral(
-			getStateVarContract(identifier)->name() + "." + identifier->name());
-		if (_assignment.rightHandSide().annotation().type->isValueType())
-			journalOpCode = "cjournal3";
-		else
-			journalOpCode = "vjournal3";
-
-		// direct assign, no nested index / member access
-		// deal with value types (can be stored in 1 storage slot)
-		journalFunc = journalOpCode + "(" + storage.slot +
-					  ", " + calcStateVarNameMemLen(stateVarNameLiteral) +
-					  ", " + saveStateVarNameToMem(stateVarNameLiteral) + ")\n";
-	}
-	else
-	{
-		if (_assignment.rightHandSide().annotation().type->isValueType())
-			journalOpCode = "cjournal5";
-		else
-			journalOpCode = "vjournal5";
-
-		// indirect access to the original var
-		u256 storageLoc;
-		string stateVarName;
-		string stateVarNameLen;
-		vector<Type const*> indexTypes;
-		vector<string> indexVars;
-		for (auto* currentExpression = &const_cast<Expression&>(_assignment.leftHandSide());;)
+		if (auto const* indexAccess = dynamic_cast<IndexAccess const*>(currentExpression))
 		{
-			if (auto const* indexAccess = dynamic_cast<IndexAccess const*>(currentExpression))
+			// handle mapping / array index access
+			auto const* indexExpression = indexAccess->indexExpression();
+			if (auto const* indexIdentifier = dynamic_cast<Identifier const*>(indexExpression))
 			{
-				// handle mapping / array index access
-				auto const* indexExpression = indexAccess->indexExpression();
-				if (auto const* indexIdentifier = dynamic_cast<Identifier const*>(indexExpression))
-				{
-					// handle variable index
-					auto const* varDeclaration
-						= dynamic_cast<VariableDeclaration const*>(indexIdentifier->annotation().referencedDeclaration);
-					solAssert(varDeclaration, "Not variable declaration");
-					auto const& localVar = m_context.localVariable(*varDeclaration);
+				// handle variable index
+				auto const* varDeclaration
+					= dynamic_cast<VariableDeclaration const*>(indexIdentifier->annotation().referencedDeclaration);
+				solAssert(varDeclaration, "Not variable declaration");
+				auto const& localVar = m_context.localVariable(*varDeclaration);
 
-					solAssert(localVar.type().sizeOnStack() == 1, "");
-					auto const& [itemName, type] = localVar.type().stackItems().front();
-					string indexNameVar = m_context.newYulVariable();
-					appendCode() << "let " << indexNameVar << " := "
-								 << localVar.suffixedName(itemName) << "\n";
-					indexVars.emplace_back(indexNameVar);
-				}
-				else if (auto const* indexLiteral = dynamic_cast<Literal const*>(indexExpression))
+				bool isCallData = false;
+				if (auto const* referenceType = dynamic_cast<ReferenceType const*>(&localVar.type()))
+					isCallData = referenceType->dataStoredIn(DataLocation::CallData);
+
+				string indexNameVar = m_context.newYulVariable();
+				if (isCallData)
 				{
-					// handle literal index
-					auto const & indexType = *indexExpression->annotation().type;
-					if (auto const* rationalNumber = dynamic_cast<RationalNumberType const*>(&indexType))
+					solAssert(localVar.type().sizeOnStack() == 2, "");
+					auto const& indexStackItems = localVar.type().stackItems();
+					auto const& [callDataOffset, offsetType] = indexStackItems[0];
+					auto const& [callDataLength, lengthType] = indexStackItems[1];
+
+					Type const* toType;
+					if (auto const* callDataArray = dynamic_cast<ArrayType const*>(localVar.type().mobileType()))
 					{
-						indexVars.emplace_back(toCompactHexWithPrefix(rationalNumber->literalValue(indexLiteral)));
+						if (callDataArray->isString())
+							toType = TypeProvider::stringMemory();
+						else if (callDataArray->isByteArray())
+							toType = TypeProvider::bytesMemory();
+						else
+							toType = TypeProvider::array(DataLocation::Memory, callDataArray->baseType());
 					}
+					else if (auto const* callDataStruct = dynamic_cast<StructType const*>(localVar.type().mobileType()))
+					{
+						toType = TypeProvider::structType(callDataStruct->structDefinition(), DataLocation::Memory);
+					}
+					else
+						solAssert(false, "Unknown calldata type");
+
+					appendCode() << "let " << indexNameVar << " := "
+								 << m_utils.conversionFunction(localVar.type(), *toType)
+								 << "(" << callDataOffset << ", " << callDataLength << ")" << "\n";
 				}
 				else
 				{
-					// TODO: 🐸 Handle function index like type conversion
-					solUnimplemented("Unable to handle this kind of index");
+					solAssert(localVar.type().sizeOnStack() == 1, "");
+					auto const& [itemName, type] = localVar.type().stackItems().front();
+					appendCode() << "let " << indexNameVar << " := "
+								 << localVar.suffixedName(itemName) << "\n";
 				}
-
-				indexTypes.emplace_back(indexExpression->annotation().type);
-				currentExpression = &const_cast<Expression&>(indexAccess->baseExpression());
+				indexVars.emplace_back(indexNameVar);
 			}
-			else if (auto const* memberAccess = dynamic_cast<MemberAccess const*>(currentExpression))
+			else if (auto const* indexLiteral = dynamic_cast<Literal const*>(indexExpression))
 			{
-				// handle field member access
-				indexTypes.emplace_back(TypeProvider::stringLiteral(memberAccess->memberName()));
-				currentExpression = &const_cast<Expression&>(memberAccess->expression());
-			}
-			else if (auto const* baseIdentifier = dynamic_cast<Identifier*>(currentExpression))
-			{
-				// save the storage location of state variable
-				auto const* varDeclaration
-					= dynamic_cast<VariableDeclaration const*>(baseIdentifier->annotation().referencedDeclaration);
-				solAssert(varDeclaration, "Not variable declaration");
-
-				// TODO: 🐸this will fail if we have local variable storage pointer assignment, handle it later
-				auto stateVarLoc = m_context.storageLocationOfStateVariable(*varDeclaration);
-				storageLoc = stateVarLoc.first;
-
-				StringLiteralType const* stateVarNameLiteral =
-					TypeProvider::stringLiteral(getStateVarContract(baseIdentifier)->name() + "." + baseIdentifier->name());
-				stateVarNameLen = calcStateVarNameMemLen(stateVarNameLiteral);
-				stateVarName = saveStateVarNameToMem(stateVarNameLiteral);
-				break;
+				// handle literal index
+				auto const & indexType = *indexExpression->annotation().type;
+				if (auto const* rationalNumber = dynamic_cast<RationalNumberType const*>(&indexType))
+				{
+					indexVars.emplace_back(toCompactHexWithPrefix(rationalNumber->literalValue(indexLiteral)));
+				}
 			}
 			else
 			{
-				solUnimplemented("Unknown expression type");
+				// TODO: 🐸 Handle function index like type conversion
+				solUnimplemented("Unable to handle this kind of index");
 			}
+
+			indexTypes.emplace_back(indexExpression->annotation().type);
+			currentExpression = &const_cast<Expression&>(indexAccess->baseExpression());
 		}
+		else if (auto const* memberAccess = dynamic_cast<MemberAccess const*>(currentExpression))
+		{
+			// handle field member access
+			indexTypes.emplace_back(TypeProvider::stringLiteral(memberAccess->memberName()));
+			currentExpression = &const_cast<Expression&>(memberAccess->expression());
+		}
+		else if (auto const* baseIdentifier = dynamic_cast<Identifier*>(currentExpression))
+		{
+			// save the storage location of state variable
+			auto const* varDeclaration
+				= dynamic_cast<VariableDeclaration const*>(baseIdentifier->annotation().referencedDeclaration);
+			solAssert(varDeclaration, "Not variable declaration");
 
-		// encode all keys with abi.encode, the order of the keys are reversed
-		string const encodeFunc = ABIFunctions(m_context.evmVersion(), m_context.revertStrings(), m_context.functionCollector())
-									  .tupleEncoder(
-										  indexTypes,
-										  indexTypes
-									  );
+			// TODO: 🐸this will fail if we have local variable storage pointer assignment, handle it later
+			auto stateVarLoc = m_context.storageLocationOfStateVariable(*varDeclaration);
+			string storageLoc = toCompactHexWithPrefix(stateVarLoc.first);
+			string stateVarName = getStateVarJournalName(baseIdentifier);
+			StringLiteralType const* stateVarNameLiteral = TypeProvider::stringLiteral(stateVarName);
+			string newYulVar = saveStateVarNameToMem(stateVarNameLiteral);
 
-		string keyMemPtr = m_context.newYulVariable();
-		appendCode() << "let " << keyMemPtr << " := " << m_utils.allocateUnboundedFunction() << "()\n";
+			if (indexTypes.empty())
+			{
+				// direct access
+				if (isComplexType(valueType))
+					journalFunc = generateComplexTypeJournal(newYulVar, storage, valueType);
+				else if (valueType->isValueType())
+					journalFunc = generateValueJournal(newYulVar, storage, storage.offsetString(), valueType);
+				else
+					journalFunc = generateReferenceJournal(newYulVar, storage);
+			}
+			else
+			{
+				// indexed access
+				if (isComplexType(valueType))
+					journalFunc = generateComplexTypeWithIndexJournal(newYulVar, storage, storageLoc,
+																	  valueType, indexVars, indexTypes);
+				else if (valueType->isValueType())
+					journalFunc = generateValueWithIndexJournal(newYulVar, storage, storageLoc, storage.offsetString(),
+																valueType, indexVars, indexTypes);
+				else
+					journalFunc = generateReferenceWithIndexJournal(newYulVar, storage, storageLoc, indexVars, indexTypes);
+			}
 
-		string start = m_context.newYulVariable();
-		appendCode() << "let " << start << " := add(" << keyMemPtr << ", 0x20)\n";
-
-		string end = m_context.newYulVariable();
-		appendCode() << "let " << end << " := "
-					 << encodeFunc << "(" << start
-					 << (!indexVars.empty() ? ", " : "")
-					 << solidity::util::joinHumanReadable(indexVars) << ")\n";
-
-		string size = m_context.newYulVariable();
-		appendCode()
-			<< "let " << size << " := add(sub(" << end << ", " << keyMemPtr << "), " << stateVarNameLen << ")\n"
-			<< "mstore(" << keyMemPtr << ", sub(" << end <<", " << start << "))\n"
-			<< m_utils.finalizeAllocationFunction() << "(" << keyMemPtr <<", " << size << ")\n";
-
-		string variableName =
-		journalFunc = journalOpCode + "(" + toCompactHexWithPrefix(storageLoc) +
-						  ", " + size +
-						  ", " + stateVarName +
-						  ", " + storage.slot +
-						  ", " + keyMemPtr + ")\n";
- 	}
+			break;
+		}
+		else
+		{
+			solUnimplemented("Unknown expression type");
+		}
+	}
 
 	appendCode() << journalFunc;
 	writeToLValue(_lvalue, _value);
@@ -3564,3 +3549,276 @@ string IRGeneratorForStatements::linkerSymbol(ContractDefinition const& _library
 	solAssert(_library.isLibrary());
 	return "linkersymbol(" + util::escapeAndQuoteString(_library.fullyQualifiedName()) + ")";
 }
+
+string IRGeneratorForStatements::calcStateVarNameMemLen(solidity::frontend::StringLiteralType const* stringLiteral)
+{
+	return toCompactHexWithPrefix(32 + stringLiteral->value().size());
+}
+
+string IRGeneratorForStatements::saveStateVarNameToMem(solidity::frontend::StringLiteralType const* stateVarNameLiteral)
+{
+	string stateVarName = m_context.newYulVariable();
+
+	appendCode() << "let " << stateVarName << " := "
+				 << m_utils.conversionFunction(*stateVarNameLiteral, *TypeProvider::stringMemory()) << "()\n";
+	return stateVarName;
+}
+
+ContractDefinition const* IRGeneratorForStatements::getStateVarContract(const solidity::frontend::Identifier* identifier)
+{
+	auto scope = dynamic_cast<ScopableAnnotation const*>(&identifier->annotation().referencedDeclaration->annotation());
+	return scope->contract;
+}
+
+string IRGeneratorForStatements::getStateVarJournalName(const solidity::frontend::Identifier* identifier)
+{
+	return getStateVarContract(identifier)->name() + "." + identifier->name();
+}
+
+bool IRGeneratorForStatements::isComplexType(solidity::frontend::Type const* type)
+{
+	return dynamic_cast<StructType const*>(type) || castToArrayIfNotStringOrBytes(type);
+}
+
+ArrayType const* IRGeneratorForStatements::castToArrayIfNotStringOrBytes(solidity::frontend::Type const* type)
+{
+	auto const* arrayType = dynamic_cast<ArrayType const*>(type);
+	if (arrayType == nullptr)
+	{
+		if (auto const* arraySliceType = dynamic_cast<ArraySliceType const*>(type))
+		{
+			arrayType = &arraySliceType->arrayType();
+		}
+	}
+
+	return arrayType && arrayType->isByteArrayOrString() ? nullptr : arrayType;
+}
+
+string IRGeneratorForStatements::generateValueJournal(std::string const& _stateVarName,
+													  IRLValue::Storage const& _storage,
+													  string const& _offset,
+													  Type const* _valueType)
+{
+	auto stateVarNameLiteral = TypeProvider::stringLiteral(_stateVarName);
+	return "vjournal5(" + _storage.slot +
+		   ", " + _offset +
+		   ", " + toCompactHexWithPrefix(_valueType->sizeOnStack()) +
+		   ", " + calcStateVarNameMemLen(stateVarNameLiteral) +
+		   ", " + _stateVarName + ")\n";
+}
+
+string IRGeneratorForStatements::generateReferenceJournal(std::string const& _stateVarName,
+														  IRLValue::Storage const& _storage)
+{
+	auto stateVarNameLiteral = TypeProvider::stringLiteral(_stateVarName);
+	return "rjournal3(" + _storage.slot +
+		   ", " + calcStateVarNameMemLen(stateVarNameLiteral) +
+		   ", " + _stateVarName + ")\n";
+}
+
+string IRGeneratorForStatements::generateValueWithIndexJournal(std::string const& _stateVarName,
+															   IRLValue::Storage const& _storage,
+															   std::string const& _storageLoc,
+															   std::string const& _offset,
+															   Type const* _valueType,
+															   std::vector<std::string>& _indexVars,
+															   std::vector<Type const*>& _indexTypes)
+{
+	auto stateVarNameLiteral = TypeProvider::stringLiteral(_stateVarName);
+
+	// reverse vars and types
+	std::reverse(_indexTypes.begin(), _indexTypes.end());
+	std::reverse(_indexVars.begin(), _indexVars.end());
+
+	// encode all keys with abi.encode, the order of the keys are reversed
+	string const encodeFunc = ABIFunctions(m_context.evmVersion(), m_context.revertStrings(), m_context.functionCollector())
+								  .tupleEncoder(
+									  _indexTypes,
+									  _indexTypes
+								  );
+
+	string keyMemPtr = m_context.newYulVariable();
+	appendCode() << "let " << keyMemPtr << " := " << m_utils.allocateUnboundedFunction() << "()\n";
+
+	string start = m_context.newYulVariable();
+	appendCode() << "let " << start << " := add(" << keyMemPtr << ", 0x20)\n";
+
+	string end = m_context.newYulVariable();
+	appendCode() << "let " << end << " := "
+				 << encodeFunc << "(" << start
+				 << (!_indexVars.empty() ? ", " : "")
+				 << solidity::util::joinHumanReadable(_indexVars) << ")\n";
+
+	string size = m_context.newYulVariable();
+	appendCode()
+		<< "let " << size << " := add(sub(" << end << ", " << keyMemPtr << "), " << calcStateVarNameMemLen(stateVarNameLiteral) << ")\n"
+		<< "mstore(" << keyMemPtr << ", sub(" << end <<", " << start << "))\n"
+		<< m_utils.finalizeAllocationFunction() << "(" << keyMemPtr <<", " << size << ")\n";
+
+
+	return "vjournal7(" + _storage.slot +
+		   ", " + _offset +
+		   ", " + toCompactHexWithPrefix(_valueType->sizeOnStack()) +
+		   ", " + size +
+		   ", " + _stateVarName +
+		   ", " + _storageLoc +
+		   ", " + keyMemPtr + ")\n";
+}
+
+string IRGeneratorForStatements::generateReferenceWithIndexJournal(std::string const& _stateVarName,
+																   IRLValue::Storage const& _storage,
+																   std::string const& _storageLoc,
+																   std::vector<std::string>& _indexVars,
+																   std::vector<Type const*>& _indexTypes)
+{
+	auto stateVarNameLiteral = TypeProvider::stringLiteral(_stateVarName);
+
+	// reverse vars and types
+	std::reverse(_indexTypes.begin(), _indexTypes.end());
+	std::reverse(_indexVars.begin(), _indexVars.end());
+
+	// encode all keys with abi.encode, the order of the keys are reversed
+	string const encodeFunc = ABIFunctions(m_context.evmVersion(), m_context.revertStrings(), m_context.functionCollector())
+								  .tupleEncoder(
+									  _indexTypes,
+									  _indexTypes
+								  );
+
+	string keyMemPtr = m_context.newYulVariable();
+	appendCode() << "let " << keyMemPtr << " := " << m_utils.allocateUnboundedFunction() << "()\n";
+
+	string start = m_context.newYulVariable();
+	appendCode() << "let " << start << " := add(" << keyMemPtr << ", 0x20)\n";
+
+	string end = m_context.newYulVariable();
+	appendCode() << "let " << end << " := "
+				 << encodeFunc << "(" << start
+				 << (!_indexVars.empty() ? ", " : "")
+				 << solidity::util::joinHumanReadable(_indexVars) << ")\n";
+
+	string size = m_context.newYulVariable();
+	appendCode()
+		<< "let " << size << " := add(sub(" << end << ", " << keyMemPtr << "), " << calcStateVarNameMemLen(stateVarNameLiteral) << ")\n"
+		<< "mstore(" << keyMemPtr << ", sub(" << end <<", " << start << "))\n"
+		<< m_utils.finalizeAllocationFunction() << "(" << keyMemPtr <<", " << size << ")\n";
+
+	return "rjournal5(" + _storage.slot +
+		   ", " + size +
+		   ", " + _stateVarName +
+		   ", " + _storageLoc +
+		   ", " + keyMemPtr + ")\n";
+}
+
+string IRGeneratorForStatements::generateComplexTypeJournal(std::string const& _stateVarName,
+															IRLValue::Storage const& _storage,
+															solidity::frontend::Type const* _valueType)
+{
+	vector<string> indexVars;
+	vector<Type const*> indexTypes;
+	return generateComplexTypeWithIndexJournal(_stateVarName, _storage, _storage.slot,
+											   _valueType, indexVars, indexTypes);
+}
+
+string IRGeneratorForStatements::generateComplexTypeWithIndexJournal(std::string const& _stateVarName,
+																	 IRLValue::Storage const& _storage,
+																	 std::string const& _storageLoc,
+																	 solidity::frontend::Type const* _valueType,
+																	 std::vector<std::string>& _indexVars,
+																     std::vector<Type const*>& _indexTypes)
+{
+	std::string journalBuffer;
+	unsigned dataOffset = 0;
+	unsigned storageOffset = 0;
+
+	if (auto const* structType = dynamic_cast<StructType const*>(_valueType))
+	{
+		auto const& memberList = structType->structDefinition().members();
+		for(const auto & member : memberList)
+		{
+			auto const* memberType = member->annotation().type;
+			auto const* memberNameType = TypeProvider::stringLiteral(member->name());
+
+			_indexVars.emplace_back(saveStateVarNameToMem(memberNameType));
+			_indexTypes.emplace_back(memberNameType);
+
+			string storageLoc = storageOffset
+									? "add(" + _storageLoc + ", " + toCompactHexWithPrefix(storageOffset) + ")"
+									: _storageLoc;
+
+			unsigned typeSize = memberType->sizeOnStack();
+			if (dataOffset + typeSize > 32)
+			{
+				// handle non-packable case
+				dataOffset = 0;
+				++storageOffset;
+			}
+
+			if (isComplexType(memberType))
+			{
+				// handle nested complex types
+				journalBuffer += generateComplexTypeWithIndexJournal(_stateVarName, _storage,
+																	 storageLoc, memberType,
+																	 _indexVars, _indexTypes);
+			}
+			else if (memberType->isValueType())
+				// handle value types
+				journalBuffer += generateValueWithIndexJournal(_stateVarName, _storage, storageLoc,
+															   toCompactHexWithPrefix(dataOffset), memberType,
+															   _indexVars, _indexTypes);
+			else
+			{
+				// handle reference type
+				journalBuffer += generateReferenceWithIndexJournal(_stateVarName, _storage, storageLoc,
+																   _indexVars, _indexTypes);
+			}
+
+			dataOffset += typeSize;
+		}
+	}
+	else if (auto const* arrayType = castToArrayIfNotStringOrBytes(_valueType))
+	{
+		string referencedSlot = m_context.newYulVariable();
+		appendCode() << "let " << referencedSlot << " := "
+					 << m_utils.arrayDataAreaFunction(*arrayType) << "(" << _storageLoc << ")\n";
+		auto const* elementType = arrayType->baseType()->mobileType();
+		unsigned typeSize = elementType->sizeOnStack();
+		for (u256 i = 0; i < arrayType->length(); ++i)
+		{
+			_indexVars.emplace_back(toCompactHexWithPrefix(i));
+			_indexTypes.emplace_back(TypeProvider::rationalNumber(i));
+
+			if (dataOffset + typeSize > 32)
+			{
+				// handle non-packable case
+				dataOffset = 0;
+				++storageOffset;
+			}
+
+			string storageLoc = storageOffset
+									? "add(" + referencedSlot + ", " + toCompactHexWithPrefix(storageOffset) + ")"
+									: referencedSlot;
+
+			if (isComplexType(elementType))
+				// handle nested complex types
+				journalBuffer += generateComplexTypeWithIndexJournal(_stateVarName, _storage,
+																	 storageLoc, elementType,
+																	 _indexVars, _indexTypes);
+			else if (elementType->isValueType())
+				// handle value types
+				journalBuffer += generateValueWithIndexJournal(_stateVarName, _storage, storageLoc,
+															   toCompactHexWithPrefix(dataOffset), elementType,
+															   _indexVars, _indexTypes);
+			else
+				// handle reference type
+				journalBuffer += generateReferenceWithIndexJournal(_stateVarName, _storage, storageLoc,
+																   _indexVars, _indexTypes);
+
+			dataOffset += typeSize;
+		}
+	}
+	else
+		solAssert(false, "not complex type");
+
+	return journalBuffer;
+}
+
