@@ -3580,10 +3580,10 @@ string IRGeneratorForStatements::generateValueJournal(std::string const& _stateV
 {
 	auto stateVarNameLiteral = TypeProvider::stringLiteral(_stateVarName);
 	return "vjournal5(" + _storage.slot +
-		   ", " + _offset +
-		   ", " + toCompactHexWithPrefix(_valueType->sizeOnStack()) +
 		   ", " + calcStateVarNameMemLen(stateVarNameLiteral) +
-		   ", " + _stateVarName + ")\n";
+		   ", " + _stateVarName +
+		   ", " + _offset +
+		   ", " + toCompactHexWithPrefix(_valueType->sizeOnStack()) + ")\n";
 }
 
 string IRGeneratorForStatements::generateReferenceJournal(std::string const& _stateVarName,
@@ -3636,10 +3636,10 @@ string IRGeneratorForStatements::generateValueWithIndexJournal(std::string const
 
 
 	return "vjournal7(" + _storage.slot +
-		   ", " + _offset +
-		   ", " + toCompactHexWithPrefix(_valueType->sizeOnStack()) +
 		   ", " + size +
 		   ", " + _stateVarName +
+		   ", " + _offset +
+		   ", " + toCompactHexWithPrefix(_valueType->sizeOnStack()) +
 		   ", " + _storageLoc +
 		   ", " + keyMemPtr + ")\n";
 }
