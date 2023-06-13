@@ -3060,52 +3060,31 @@ void IRGeneratorForStatements::writeToLValueWithJournal(Assignment const& _assig
 				if (auto const* referenceType = dynamic_cast<ReferenceType const*>(&localVar.type()))
 					isCallData = referenceType->dataStoredIn(DataLocation::CallData);
 
-				string indexNameVar = m_context.newYulVariable();
 				if (isCallData)
 				{
 					solAssert(localVar.type().sizeOnStack() == 2, "");
-					auto const& indexStackItems = localVar.type().stackItems();
-					auto const& [callDataOffset, offsetType] = indexStackItems[0];
-					auto const& [callDataLength, lengthType] = indexStackItems[1];
+					string offset = localVar.part("offset").name();
+					string length = localVar.part("length").name();
 
-					Type const* toType;
-					if (auto const* callDataArray = dynamic_cast<ArrayType const*>(localVar.type().mobileType()))
-					{
-						if (callDataArray->isString())
-							toType = TypeProvider::stringMemory();
-						else if (callDataArray->isByteArray())
-							toType = TypeProvider::bytesMemory();
-						else
-							toType = TypeProvider::array(DataLocation::Memory, callDataArray->baseType());
-					}
-					else if (auto const* callDataStruct = dynamic_cast<StructType const*>(localVar.type().mobileType()))
-					{
-						toType = TypeProvider::structType(callDataStruct->structDefinition(), DataLocation::Memory);
-					}
-					else
-						solAssert(false, "Unknown calldata type");
-
-					appendCode() << "let " << indexNameVar << " := "
-								 << m_utils.conversionFunction(localVar.type(), *toType)
-								 << "(" << callDataOffset << ", " << callDataLength << ")" << "\n";
+					indexVars.emplace_back(length);
+					indexVars.emplace_back(offset);
 				}
 				else
 				{
 					solAssert(localVar.type().sizeOnStack() == 1, "");
 					auto const& [itemName, type] = localVar.type().stackItems().front();
+					string indexNameVar = m_context.newYulVariable();
 					appendCode() << "let " << indexNameVar << " := "
 								 << localVar.suffixedName(itemName) << "\n";
+					indexVars.emplace_back(indexNameVar);
 				}
-				indexVars.emplace_back(indexNameVar);
 			}
 			else if (auto const* indexLiteral = dynamic_cast<Literal const*>(indexExpression))
 			{
 				// handle literal index
-				auto const & indexType = *indexExpression->annotation().type;
-				if (auto const* rationalNumber = dynamic_cast<RationalNumberType const*>(&indexType))
-				{
+				auto const * indexType = indexExpression->annotation().type;
+				if (auto const* rationalNumber = dynamic_cast<RationalNumberType const*>(indexType))
 					indexVars.emplace_back(toCompactHexWithPrefix(rationalNumber->literalValue(indexLiteral)));
-				}
 			}
 			else
 			{
@@ -3738,7 +3717,6 @@ string IRGeneratorForStatements::generateComplexTypeWithIndexJournal(std::string
 			auto const* memberType = member->annotation().type;
 			auto const* memberNameType = TypeProvider::stringLiteral(member->name());
 
-			_indexVars.emplace_back(saveStateVarNameToMem(memberNameType));
 			_indexTypes.emplace_back(memberNameType);
 
 			string storageLoc = storageOffset
