@@ -3066,6 +3066,8 @@ void IRGeneratorForStatements::writeToLValueWithJournal(Assignment const& _assig
 					string offset = localVar.part("offset").name();
 					string length = localVar.part("length").name();
 
+					// put calldata length & offset in reverse order
+					// since we have a reverse later in code generation part
 					indexVars.emplace_back(length);
 					indexVars.emplace_back(offset);
 				}
@@ -3583,7 +3585,7 @@ string IRGeneratorForStatements::generateValueJournal(std::string const& _stateV
 		   ", " + calcStateVarNameMemLen(stateVarNameLiteral) +
 		   ", " + _stateVarName +
 		   ", " + _offset +
-		   ", " + toCompactHexWithPrefix(_valueType->sizeOnStack()) + ")\n";
+		   ", " + toCompactHexWithPrefix(_valueType->storageBytes()) + ")\n";
 }
 
 string IRGeneratorForStatements::generateReferenceJournal(std::string const& _stateVarName,
@@ -3639,7 +3641,7 @@ string IRGeneratorForStatements::generateValueWithIndexJournal(std::string const
 		   ", " + size +
 		   ", " + _stateVarName +
 		   ", " + _offset +
-		   ", " + toCompactHexWithPrefix(_valueType->sizeOnStack()) +
+		   ", " + toCompactHexWithPrefix(_valueType->storageBytes()) +
 		   ", " + _storageLoc +
 		   ", " + keyMemPtr + ")\n";
 }
@@ -3732,23 +3734,19 @@ string IRGeneratorForStatements::generateComplexTypeWithIndexJournal(std::string
 			}
 
 			if (isComplexType(memberType))
-			{
 				// handle nested complex types
 				journalBuffer += generateComplexTypeWithIndexJournal(_stateVarName, _storage,
 																	 storageLoc, memberType,
 																	 _indexVars, _indexTypes);
-			}
 			else if (memberType->isValueType())
 				// handle value types
 				journalBuffer += generateValueWithIndexJournal(_stateVarName, _storage, storageLoc,
 															   toCompactHexWithPrefix(dataOffset), memberType,
 															   _indexVars, _indexTypes);
 			else
-			{
 				// handle reference type
 				journalBuffer += generateReferenceWithIndexJournal(_stateVarName, _storage, storageLoc,
 																   _indexVars, _indexTypes);
-			}
 
 			dataOffset += typeSize;
 		}
