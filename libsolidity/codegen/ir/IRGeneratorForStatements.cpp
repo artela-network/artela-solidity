@@ -3111,8 +3111,8 @@ void IRGeneratorForStatements::writeToLValueWithJournal(Assignment const& _assig
 			solAssert(varDeclaration, "Not variable declaration");
 
 			// TODO: 🐸this will fail if we have local variable storage pointer assignment, handle it later
-			auto stateVarLoc = m_context.storageLocationOfStateVariable(*varDeclaration);
-			string storageLoc = toCompactHexWithPrefix(stateVarLoc.first);
+			auto stateVarSlot = m_context.storageLocationOfStateVariable(*varDeclaration);
+			string stateVarLoc = toCompactHexWithPrefix(stateVarSlot.first);
 			string stateVarName = getStateVarJournalName(baseIdentifier);
 			StringLiteralType const* stateVarNameLiteral = TypeProvider::stringLiteral(stateVarName);
 			string newYulVar = saveStateVarNameToMem(stateVarNameLiteral);
@@ -3131,13 +3131,13 @@ void IRGeneratorForStatements::writeToLValueWithJournal(Assignment const& _assig
 			{
 				// indexed access
 				if (isComplexType(valueType))
-					journalFunc = generateComplexTypeWithIndexJournal(newYulVar, storage, storageLoc,
+					journalFunc = generateComplexTypeWithIndexJournal(newYulVar, stateVarLoc, storage.slot,
 																	  valueType, indexVars, indexTypes);
 				else if (valueType->isValueType())
-					journalFunc = generateValueWithIndexJournal(newYulVar, storage, storageLoc, storage.offsetString(),
+					journalFunc = generateValueWithIndexJournal(newYulVar, stateVarLoc, storage.slot, storage.offsetString(),
 																valueType, indexVars, indexTypes);
 				else
-					journalFunc = generateReferenceWithIndexJournal(newYulVar, storage, storageLoc, indexVars, indexTypes);
+					journalFunc = generateReferenceWithIndexJournal(newYulVar, stateVarLoc, storage.slot, indexVars, indexTypes);
 			}
 
 			break;
@@ -3598,7 +3598,7 @@ string IRGeneratorForStatements::generateReferenceJournal(std::string const& _st
 }
 
 string IRGeneratorForStatements::generateValueWithIndexJournal(std::string const& _stateVarName,
-															   IRLValue::Storage const& _storage,
+															   std::string const& _stateVarSlot,
 															   std::string const& _storageLoc,
 															   std::string const& _offset,
 															   Type const* _valueType,
@@ -3637,7 +3637,7 @@ string IRGeneratorForStatements::generateValueWithIndexJournal(std::string const
 		<< m_utils.finalizeAllocationFunction() << "(" << keyMemPtr <<", " << size << ")\n";
 
 
-	return "vjournal7(" + _storage.slot +
+	return "vjournal7(" + _stateVarSlot +
 		   ", " + size +
 		   ", " + _stateVarName +
 		   ", " + _offset +
@@ -3647,7 +3647,7 @@ string IRGeneratorForStatements::generateValueWithIndexJournal(std::string const
 }
 
 string IRGeneratorForStatements::generateReferenceWithIndexJournal(std::string const& _stateVarName,
-																   IRLValue::Storage const& _storage,
+																   std::string const& _stateVarSlot,
 																   std::string const& _storageLoc,
 																   std::vector<std::string>& _indexVars,
 																   std::vector<Type const*>& _indexTypes)
@@ -3683,7 +3683,7 @@ string IRGeneratorForStatements::generateReferenceWithIndexJournal(std::string c
 		<< "mstore(" << keyMemPtr << ", sub(" << end <<", " << start << "))\n"
 		<< m_utils.finalizeAllocationFunction() << "(" << keyMemPtr <<", " << size << ")\n";
 
-	return "rjournal5(" + _storage.slot +
+	return "rjournal5(" + _stateVarSlot +
 		   ", " + size +
 		   ", " + _stateVarName +
 		   ", " + _storageLoc +
@@ -3696,12 +3696,12 @@ string IRGeneratorForStatements::generateComplexTypeJournal(std::string const& _
 {
 	vector<string> indexVars;
 	vector<Type const*> indexTypes;
-	return generateComplexTypeWithIndexJournal(_stateVarName, _storage, _storage.slot,
+	return generateComplexTypeWithIndexJournal(_stateVarName, _storage.slot, _storage.slot,
 											   _valueType, indexVars, indexTypes);
 }
 
 string IRGeneratorForStatements::generateComplexTypeWithIndexJournal(std::string const& _stateVarName,
-																	 IRLValue::Storage const& _storage,
+																	 std::string const& _stateVarSlot,
 																	 std::string const& _storageLoc,
 																	 solidity::frontend::Type const* _valueType,
 																	 std::vector<std::string>& _indexVars,
@@ -3721,11 +3721,7 @@ string IRGeneratorForStatements::generateComplexTypeWithIndexJournal(std::string
 
 			_indexTypes.emplace_back(memberNameType);
 
-			string storageLoc = storageOffset
-									? "add(" + _storageLoc + ", " + toCompactHexWithPrefix(storageOffset) + ")"
-									: _storageLoc;
-
-			unsigned typeSize = memberType->sizeOnStack();
+			unsigned typeSize = memberType->storageBytes();
 			if (dataOffset + typeSize > 32)
 			{
 				// handle non-packable case
@@ -3733,19 +3729,23 @@ string IRGeneratorForStatements::generateComplexTypeWithIndexJournal(std::string
 				++storageOffset;
 			}
 
+			string storageLoc = storageOffset > 0
+ 									? "add(" + _storageLoc + ", " + toCompactHexWithPrefix(storageOffset) + ")"
+									: _storageLoc;
+
 			if (isComplexType(memberType))
 				// handle nested complex types
-				journalBuffer += generateComplexTypeWithIndexJournal(_stateVarName, _storage,
+				journalBuffer += generateComplexTypeWithIndexJournal(_stateVarName, _stateVarSlot,
 																	 storageLoc, memberType,
 																	 _indexVars, _indexTypes);
 			else if (memberType->isValueType())
 				// handle value types
-				journalBuffer += generateValueWithIndexJournal(_stateVarName, _storage, storageLoc,
+				journalBuffer += generateValueWithIndexJournal(_stateVarName, _stateVarSlot, storageLoc,
 															   toCompactHexWithPrefix(dataOffset), memberType,
 															   _indexVars, _indexTypes);
 			else
 				// handle reference type
-				journalBuffer += generateReferenceWithIndexJournal(_stateVarName, _storage, storageLoc,
+				journalBuffer += generateReferenceWithIndexJournal(_stateVarName, _stateVarSlot, storageLoc,
 																   _indexVars, _indexTypes);
 
 			dataOffset += typeSize;
@@ -3757,7 +3757,7 @@ string IRGeneratorForStatements::generateComplexTypeWithIndexJournal(std::string
 		appendCode() << "let " << referencedSlot << " := "
 					 << m_utils.arrayDataAreaFunction(*arrayType) << "(" << _storageLoc << ")\n";
 		auto const* elementType = arrayType->baseType()->mobileType();
-		unsigned typeSize = elementType->sizeOnStack();
+		unsigned typeSize = elementType->storageBytes();
 		for (u256 i = 0; i < arrayType->length(); ++i)
 		{
 			_indexVars.emplace_back(toCompactHexWithPrefix(i));
@@ -3776,17 +3776,17 @@ string IRGeneratorForStatements::generateComplexTypeWithIndexJournal(std::string
 
 			if (isComplexType(elementType))
 				// handle nested complex types
-				journalBuffer += generateComplexTypeWithIndexJournal(_stateVarName, _storage,
+				journalBuffer += generateComplexTypeWithIndexJournal(_stateVarName, _stateVarSlot,
 																	 storageLoc, elementType,
 																	 _indexVars, _indexTypes);
 			else if (elementType->isValueType())
 				// handle value types
-				journalBuffer += generateValueWithIndexJournal(_stateVarName, _storage, storageLoc,
+				journalBuffer += generateValueWithIndexJournal(_stateVarName, _stateVarSlot, storageLoc,
 															   toCompactHexWithPrefix(dataOffset), elementType,
 															   _indexVars, _indexTypes);
 			else
 				// handle reference type
-				journalBuffer += generateReferenceWithIndexJournal(_stateVarName, _storage, storageLoc,
+				journalBuffer += generateReferenceWithIndexJournal(_stateVarName, _stateVarSlot, storageLoc,
 																   _indexVars, _indexTypes);
 
 			dataOffset += typeSize;

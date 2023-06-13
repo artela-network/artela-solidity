@@ -259,14 +259,14 @@ private:
 	std::string generateReferenceJournal(std::string const& _stateVarName,
 										 IRLValue::Storage const& _storage);
 	std::string generateValueWithIndexJournal(std::string const& _stateVarName,
-											  IRLValue::Storage const& _storage,
+											  std::string const& _stateVarSlot,
 											  std::string const& _storageLoc,
 											  std::string const& _offset,
 											  Type const* _valueType,
 											  std::vector<std::string>& _indexVars,
 											  std::vector<Type const*>& _indexTypes);
 	std::string generateReferenceWithIndexJournal(std::string const& _stateVarName,
-												  IRLValue::Storage const& _storage,
+												  std::string const& _stateVarSlot,
 												  std::string const& _storageLoc,
 												  std::vector<std::string>& _indexVars,
 												  std::vector<Type const*>& _indexTypes);
@@ -274,7 +274,7 @@ private:
 										   IRLValue::Storage const& _storage,
 										   solidity::frontend::Type const* _valueType);
 	std::string generateComplexTypeWithIndexJournal(std::string const& _stateVarName,
-													IRLValue::Storage const& _storage,
+													std::string const& _stateVarSlot,
 													std::string const& _storageLoc,
 													solidity::frontend::Type const* _valueType,
 													std::vector<std::string>& _indexVars,
