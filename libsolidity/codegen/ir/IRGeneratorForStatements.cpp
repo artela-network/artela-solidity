@@ -3129,6 +3129,10 @@ void IRGeneratorForStatements::writeToLValueWithJournal(Assignment const& _assig
 			}
 			else
 			{
+				// reverse the index var and types
+				std::reverse(indexTypes.begin(), indexTypes.end());
+				std::reverse(indexVars.begin(), indexVars.end());
+
 				// indexed access
 				if (isComplexType(valueType))
 					journalFunc = generateComplexTypeWithIndexJournal(newYulVar, stateVarLoc, storage.slot,
@@ -3607,10 +3611,6 @@ string IRGeneratorForStatements::generateValueWithIndexJournal(std::string const
 {
 	auto stateVarNameLiteral = TypeProvider::stringLiteral(_stateVarName);
 
-	// reverse vars and types
-	std::reverse(_indexTypes.begin(), _indexTypes.end());
-	std::reverse(_indexVars.begin(), _indexVars.end());
-
 	// encode all keys with abi.encode, the order of the keys are reversed
 	string const encodeFunc = ABIFunctions(m_context.evmVersion(), m_context.revertStrings(), m_context.functionCollector())
 								  .tupleEncoder(
@@ -3653,10 +3653,6 @@ string IRGeneratorForStatements::generateReferenceWithIndexJournal(std::string c
 																   std::vector<Type const*>& _indexTypes)
 {
 	auto stateVarNameLiteral = TypeProvider::stringLiteral(_stateVarName);
-
-	// reverse vars and types
-	std::reverse(_indexTypes.begin(), _indexTypes.end());
-	std::reverse(_indexVars.begin(), _indexVars.end());
 
 	// encode all keys with abi.encode, the order of the keys are reversed
 	string const encodeFunc = ABIFunctions(m_context.evmVersion(), m_context.revertStrings(), m_context.functionCollector())
