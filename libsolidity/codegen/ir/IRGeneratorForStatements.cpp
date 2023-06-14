@@ -3036,7 +3036,7 @@ void IRGeneratorForStatements::writeToLValueWithJournal(Assignment const& _assig
 	auto const& storage = get<IRLValue::Storage>(m_currentLValue.value().kind);
 
 	string journalFunc;
-	auto const* valueType = _assignment.rightHandSide().annotation().type;
+	auto const* variableType = _assignment.leftHandSide().annotation().type;
 
 	appendCode() << "{\n";
 	// indirect access to the original var
@@ -3103,27 +3103,27 @@ void IRGeneratorForStatements::writeToLValueWithJournal(Assignment const& _assig
 			indexTypes.emplace_back(TypeProvider::stringLiteral(memberAccess->memberName()));
 			currentExpression = &const_cast<Expression&>(memberAccess->expression());
 		}
-		else if (auto const* baseIdentifier = dynamic_cast<Identifier*>(currentExpression))
+		else if (auto const* identifier = dynamic_cast<Identifier*>(currentExpression))
 		{
 			// save the storage location of state variable
 			auto const* varDeclaration
-				= dynamic_cast<VariableDeclaration const*>(baseIdentifier->annotation().referencedDeclaration);
+				= dynamic_cast<VariableDeclaration const*>(identifier->annotation().referencedDeclaration);
 			solAssert(varDeclaration, "Not variable declaration");
 
 			// TODO: 🐸this will fail if we have local variable storage pointer assignment, handle it later
 			auto stateVarSlot = m_context.storageLocationOfStateVariable(*varDeclaration);
 			string stateVarLoc = toCompactHexWithPrefix(stateVarSlot.first);
-			string stateVarName = getStateVarJournalName(baseIdentifier);
+			string stateVarName = getStateVarJournalName(identifier);
 			StringLiteralType const* stateVarNameLiteral = TypeProvider::stringLiteral(stateVarName);
 			string newYulVar = saveStateVarNameToMem(stateVarNameLiteral);
 
 			if (indexTypes.empty())
 			{
 				// direct access
-				if (isComplexType(valueType))
-					journalFunc = generateComplexTypeJournal(newYulVar, storage, valueType);
-				else if (valueType->isValueType())
-					journalFunc = generateValueJournal(newYulVar, storage, storage.offsetString(), valueType);
+				if (isComplexType(variableType))
+					journalFunc = generateComplexTypeJournal(newYulVar, storage, variableType);
+				else if (variableType->isValueType())
+					journalFunc = generateValueJournal(newYulVar, storage, storage.offsetString(), variableType);
 				else
 					journalFunc = generateReferenceJournal(newYulVar, storage);
 			}
@@ -3134,12 +3134,12 @@ void IRGeneratorForStatements::writeToLValueWithJournal(Assignment const& _assig
 				std::reverse(indexVars.begin(), indexVars.end());
 
 				// indexed access
-				if (isComplexType(valueType))
+				if (isComplexType(variableType))
 					journalFunc = generateComplexTypeWithIndexJournal(newYulVar, stateVarLoc, storage.slot,
-																	  valueType, indexVars, indexTypes);
-				else if (valueType->isValueType())
+																	  variableType, indexVars, indexTypes);
+				else if (variableType->isValueType())
 					journalFunc = generateValueWithIndexJournal(newYulVar, stateVarLoc, storage.slot, storage.offsetString(),
-																valueType, indexVars, indexTypes);
+																variableType, indexVars, indexTypes);
 				else
 					journalFunc = generateReferenceWithIndexJournal(newYulVar, stateVarLoc, storage.slot, indexVars, indexTypes);
 			}
