@@ -3613,7 +3613,7 @@ string IRGeneratorForStatements::generateValueWithIndexJournal(std::string const
 
 	// encode all keys with abi.encode, the order of the keys are reversed
 	string const encodeFunc = ABIFunctions(m_context.evmVersion(), m_context.revertStrings(), m_context.functionCollector())
-								  .tupleEncoder(
+								  .journalIndexEncoder(
 									  _indexTypes,
 									  _indexTypes
 								  );
@@ -3656,7 +3656,7 @@ string IRGeneratorForStatements::generateReferenceWithIndexJournal(std::string c
 
 	// encode all keys with abi.encode, the order of the keys are reversed
 	string const encodeFunc = ABIFunctions(m_context.evmVersion(), m_context.revertStrings(), m_context.functionCollector())
-								  .tupleEncoder(
+								  .journalIndexEncoder(
 									  _indexTypes,
 									  _indexTypes
 								  );
