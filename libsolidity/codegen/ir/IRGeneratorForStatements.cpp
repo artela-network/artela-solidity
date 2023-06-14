@@ -3700,8 +3700,8 @@ string IRGeneratorForStatements::generateComplexTypeWithIndexJournal(std::string
 																	 std::string const& _stateVarSlot,
 																	 std::string const& _storageLoc,
 																	 solidity::frontend::Type const* _valueType,
-																	 std::vector<std::string>& _indexVars,
-																     std::vector<Type const*>& _indexTypes)
+																	 std::vector<std::string> const& _indexVars,
+																     std::vector<Type const*> const& _indexTypes)
 {
 	std::string journalBuffer;
 	unsigned dataOffset = 0;
@@ -3712,10 +3712,13 @@ string IRGeneratorForStatements::generateComplexTypeWithIndexJournal(std::string
 		auto const& memberList = structType->structDefinition().members();
 		for(const auto & member : memberList)
 		{
+			std::vector<std::string> indexVars = _indexVars;
+			std::vector<Type const*> indexTypes = _indexTypes;
+
 			auto const* memberType = member->annotation().type;
 			auto const* memberNameType = TypeProvider::stringLiteral(member->name());
 
-			_indexTypes.emplace_back(memberNameType);
+			indexTypes.emplace_back(memberNameType);
 
 			unsigned typeSize = memberType->storageBytes();
 			if (dataOffset + typeSize > 32)
@@ -3733,16 +3736,16 @@ string IRGeneratorForStatements::generateComplexTypeWithIndexJournal(std::string
 				// handle nested complex types
 				journalBuffer += generateComplexTypeWithIndexJournal(_stateVarName, _stateVarSlot,
 																	 storageLoc, memberType,
-																	 _indexVars, _indexTypes);
+																	 indexVars, indexTypes);
 			else if (memberType->isValueType())
 				// handle value types
 				journalBuffer += generateValueWithIndexJournal(_stateVarName, _stateVarSlot, storageLoc,
 															   toCompactHexWithPrefix(dataOffset), memberType,
-															   _indexVars, _indexTypes);
+															   indexVars, indexTypes);
 			else
 				// handle reference type
 				journalBuffer += generateReferenceWithIndexJournal(_stateVarName, _stateVarSlot, storageLoc,
-																   _indexVars, _indexTypes);
+																   indexVars, indexTypes);
 
 			dataOffset += typeSize;
 		}
@@ -3756,8 +3759,11 @@ string IRGeneratorForStatements::generateComplexTypeWithIndexJournal(std::string
 		unsigned typeSize = elementType->storageBytes();
 		for (u256 i = 0; i < arrayType->length(); ++i)
 		{
-			_indexVars.emplace_back(toCompactHexWithPrefix(i));
-			_indexTypes.emplace_back(TypeProvider::rationalNumber(i));
+			std::vector<std::string> indexVars = _indexVars;
+			std::vector<Type const*> indexTypes = _indexTypes;
+
+			indexVars.emplace_back(toCompactHexWithPrefix(i));
+			indexTypes.emplace_back(TypeProvider::rationalNumber(i));
 
 			if (dataOffset + typeSize > 32)
 			{
@@ -3774,16 +3780,16 @@ string IRGeneratorForStatements::generateComplexTypeWithIndexJournal(std::string
 				// handle nested complex types
 				journalBuffer += generateComplexTypeWithIndexJournal(_stateVarName, _stateVarSlot,
 																	 storageLoc, elementType,
-																	 _indexVars, _indexTypes);
+																	 indexVars, indexTypes);
 			else if (elementType->isValueType())
 				// handle value types
 				journalBuffer += generateValueWithIndexJournal(_stateVarName, _stateVarSlot, storageLoc,
 															   toCompactHexWithPrefix(dataOffset), elementType,
-															   _indexVars, _indexTypes);
+															   indexVars, indexTypes);
 			else
 				// handle reference type
 				journalBuffer += generateReferenceWithIndexJournal(_stateVarName, _stateVarSlot, storageLoc,
-																   _indexVars, _indexTypes);
+																   indexVars, indexTypes);
 
 			dataOffset += typeSize;
 		}

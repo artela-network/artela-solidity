@@ -277,8 +277,8 @@ private:
 													std::string const& _stateVarSlot,
 													std::string const& _storageLoc,
 													solidity::frontend::Type const* _valueType,
-													std::vector<std::string>& _indexVars,
-													std::vector<Type const*>& _indexTypes);
+													std::vector<std::string> const& _indexVars,
+													std::vector<Type const*> const&  _indexTypes);
 
 	std::function<std::string()> m_placeholderCallback;
 	YulUtilFunctions& m_utils;
