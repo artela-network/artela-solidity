@@ -3085,9 +3085,7 @@ void IRGeneratorForStatements::writeToLValueWithJournal(Assignment const& _assig
 			{
 				// handle literal index
 				auto const * indexType = indexExpression->annotation().type;
-				if (dynamic_cast<RationalNumberType const*>(indexType)
-						|| dynamic_cast<AddressType const*>(indexType)
-						|| dynamic_cast<BoolType const*>(indexType))
+				if (indexType->mobileType()->isValueType())
 					indexVars.emplace_back(toCompactHexWithPrefix(indexType->literalValue(indexLiteral)));
 			}
 			else
