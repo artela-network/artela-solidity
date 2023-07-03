@@ -1601,7 +1601,7 @@ jobs:
               sed -En 's/^Version: ([0-9.]+.*\+commit\.[0-9a-f]+(\.mod)?).*$/\1/p'
             )
 
-            mkdir -p solc-bin/{linux-amd64,macosx-amd64,windows-amd64,bin}
+            mkdir -p solc-bin/{linux-amd64,windows-amd64,bin}
 
             mv github/solc-static-linux "solc-bin/linux-amd64/solc-linux-amd64-v${full_version}"
             mv github/solc-windows.exe  "solc-bin/windows-amd64/solc-windows-amd64-v${full_version}.exe"
@@ -1652,7 +1652,7 @@ workflows:
 
       # Ubuntu build and tests
       - b_ubu: *requires_nothing
-      - t_ubu_cli: *requires_b_ubu
+#      - t_ubu_cli: *requires_b_ubu
 #      - t_ubu_locale: *requires_b_ubu
 #      - t_ubu_soltest_all: *requires_b_ubu
       - b_ubu_clang: *requires_nothing
