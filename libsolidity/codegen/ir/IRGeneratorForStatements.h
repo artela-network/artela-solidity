@@ -227,6 +227,9 @@ private:
 	/// @returns a fresh IR variable containing the value of the lvalue @a _lvalue.
 	IRVariable readFromLValue(IRLValue const& _lvalue);
 
+	/// Assigns the value of @a _value to the lvalue @a _lvalue, and record the storage assignment
+	void writeToLValueWithJournal(Assignment const& _assignment, IRLValue const& _lvalue, IRVariable const& _value);
+
 	/// Stores the given @a _lvalue in m_currentLValue, if it will be written to (willBeWrittenTo). Otherwise
 	/// defines the expression @a _expression by reading the value from @a _lvalue.
 	void setLValue(Expression const& _expression, IRLValue _lvalue);
@@ -241,6 +244,41 @@ private:
 	static Type const& type(Expression const& _expression);
 
 	std::string linkerSymbol(ContractDefinition const& _library) const;
+
+	/// Journal related methods
+	static ArrayType const* castToArrayIfNotStringOrBytes(Type const* type);
+	static std::string calcStateVarNameMemLen(StringLiteralType const* stringLiteral);
+	static ContractDefinition const* getStateVarContract(Identifier const* identifier);
+	static bool isComplexType(Type const* type);
+	static std::string getStateVarJournalName(const solidity::frontend::Identifier* identifier);
+	std::string saveStateVarNameToMem(StringLiteralType const* stateVarNameLiteral);
+	std::string generateValueJournal(std::string const& _stateVarName,
+									 IRLValue::Storage const& _storage,
+									 std::string const& _offset,
+									 Type const* _valueType);
+	std::string generateReferenceJournal(std::string const& _stateVarName,
+										 IRLValue::Storage const& _storage);
+	std::string generateValueWithIndexJournal(std::string const& _stateVarName,
+											  std::string const& _stateVarSlot,
+											  std::string const& _storageLoc,
+											  std::string const& _offset,
+											  Type const* _valueType,
+											  std::vector<std::string>& _indexVars,
+											  std::vector<Type const*>& _indexTypes);
+	std::string generateReferenceWithIndexJournal(std::string const& _stateVarName,
+												  std::string const& _stateVarSlot,
+												  std::string const& _storageLoc,
+												  std::vector<std::string>& _indexVars,
+												  std::vector<Type const*>& _indexTypes);
+	std::string generateComplexTypeJournal(std::string const& _stateVarName,
+										   IRLValue::Storage const& _storage,
+										   solidity::frontend::Type const* _valueType);
+	std::string generateComplexTypeWithIndexJournal(std::string const& _stateVarName,
+													std::string const& _stateVarSlot,
+													std::string const& _storageLoc,
+													solidity::frontend::Type const* _valueType,
+													std::vector<std::string> const& _indexVars,
+													std::vector<Type const*> const&  _indexTypes);
 
 	std::function<std::string()> m_placeholderCallback;
 	YulUtilFunctions& m_utils;

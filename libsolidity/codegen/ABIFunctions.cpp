@@ -116,6 +116,75 @@ string ABIFunctions::tupleEncoder(
 	});
 }
 
+string ABIFunctions::journalIndexEncoder(
+	TypePointers const& _givenTypes,
+	TypePointers _targetTypes,
+	bool _encodeAsLibraryTypes,
+	bool _reversed
+)
+{
+	solAssert(_givenTypes.size() == _targetTypes.size(), "");
+	EncodingOptions options;
+	options.encodeAsLibraryTypes = _encodeAsLibraryTypes;
+	options.encodeFunctionFromStack = true;
+	options.padded = true;
+	options.dynamicInplace = false;
+
+	for (Type const*& t: _targetTypes)
+	{
+		solAssert(t, "");
+		t = t->fullEncodingType(options.encodeAsLibraryTypes, true, !options.padded);
+		solAssert(t, "");
+	}
+
+	string functionName = string("journal_encode_tuple_");
+	for (auto const& t: _givenTypes)
+		functionName += t->identifier() + "_";
+	functionName += "_to_";
+	for (auto const& t: _targetTypes)
+		functionName += t->identifier() + "_";
+	functionName += options.toFunctionNameSuffix();
+	if (_reversed)
+		functionName += "_reversed";
+
+	return createFunction(functionName, [&]() {
+		// Note that the values are in reverse due to the difference in calling semantics.
+		Whiskers templ(R"(
+			function <functionName>(headStart <valueParams>) -> tail {
+				tail := headStart
+				<encodeElements>
+			}
+		)");
+		templ("functionName", functionName);
+		string encodeElements;
+		size_t stackPos = 0;
+		for (size_t i = 0; i < _givenTypes.size(); ++i)
+		{
+			solAssert(_givenTypes[i], "");
+			solAssert(_targetTypes[i], "");
+			size_t sizeOnStack = _givenTypes[i]->sizeOnStack();
+			Whiskers elementTempl(
+		  		string(R"(
+					tail := <abiEncode>(tail <values>)
+				)")
+			);
+			string values = suffixedVariableNameList("value", stackPos, stackPos + sizeOnStack);
+			elementTempl("values", values.empty() ? "" : ", " + values );
+			elementTempl("abiEncode", tupleEncoder({_givenTypes[i]}, {_targetTypes[i]}));
+			encodeElements += elementTempl.render();
+			stackPos += sizeOnStack;
+		}
+		string valueParams =
+		_reversed ?
+			suffixedVariableNameList("value", stackPos, 0) :
+			suffixedVariableNameList("value", 0, stackPos);
+		templ("valueParams", valueParams.empty() ? "" : ", " + valueParams);
+		templ("encodeElements", encodeElements);
+
+		return templ.render();
+	});
+}
+
 string ABIFunctions::tupleEncoderPacked(
 	TypePointers const& _givenTypes,
 	TypePointers _targetTypes,

@@ -43,6 +43,7 @@ public:
 	{
 		size_t id;
 		std::uint64_t hash;
+		std::string name;
 	};
 
 	static YulStringRepository& instance()
@@ -54,17 +55,17 @@ public:
 	Handle stringToHandle(std::string const& _string)
 	{
 		if (_string.empty())
-			return { 0, emptyHash() };
+			return { 0, emptyHash() , _string};
 		std::uint64_t h = hash(_string);
 		auto range = m_hashToID.equal_range(h);
 		for (auto it = range.first; it != range.second; ++it)
 			if (*m_strings[it->second] == _string)
-				return Handle{it->second, h};
+				return Handle{it->second, h, _string};
 		m_strings.emplace_back(std::make_shared<std::string>(_string));
 		size_t id = m_strings.size() - 1;
 		m_hashToID.emplace_hint(range.second, std::make_pair(h, id));
 
-		return Handle{id, h};
+		return Handle{id, h, _string};
 	}
 	std::string const& idToString(size_t _id) const	{ return *m_strings.at(_id); }
 
@@ -159,7 +160,7 @@ public:
 
 private:
 	/// Handle of the string. Assumes that the empty string has ID zero.
-	YulStringRepository::Handle m_handle{ 0, YulStringRepository::emptyHash() };
+	YulStringRepository::Handle m_handle{ 0, YulStringRepository::emptyHash() , ""};
 };
 
 inline YulString operator "" _yulstring(char const* _string, std::size_t _size)

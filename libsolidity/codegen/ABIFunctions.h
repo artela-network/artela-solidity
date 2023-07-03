@@ -83,6 +83,13 @@ public:
 		bool _reversed = false
 	);
 
+	std::string journalIndexEncoder(
+		TypePointers const& _givenTypes,
+		TypePointers _targetTypes,
+		bool _encodeAsLibraryTypes = false,
+		bool _reversed = false
+	);
+
 	/// Specialization of tupleEncoder to _reversed = true
 	std::string tupleEncoderReversed(
 		TypePointers const& _givenTypes,
