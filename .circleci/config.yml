@@ -1641,7 +1641,7 @@ workflows:
       - b_ubu_ossfuzz: *requires_nothing
 
       # OS/X build and tests
-      - b_osx: *requires_nothing
+#      - b_osx: *requires_nothing
 #      - t_osx_cli: *requires_b_osx
 #      - t_osx_soltest: *requires_b_osx
 
