@@ -1586,7 +1586,6 @@ jobs:
           command: |
             mkdir github/
             cp workspace/solc/solc-static-linux github/solc-static-linux
-            cp workspace/build/solc/solc        github/solc-macos
             cp workspace/solc/Release/solc.exe  github/solc-windows.exe
             cp workspace/soljson.js             github/soljson.js
 
@@ -1605,7 +1604,6 @@ jobs:
             mkdir -p solc-bin/{linux-amd64,macosx-amd64,windows-amd64,bin}
 
             mv github/solc-static-linux "solc-bin/linux-amd64/solc-linux-amd64-v${full_version}"
-            mv github/solc-macos        "solc-bin/macosx-amd64/solc-macosx-amd64-v${full_version}"
             mv github/solc-windows.exe  "solc-bin/windows-amd64/solc-windows-amd64-v${full_version}.exe"
             mv github/soljson.js        "solc-bin/bin/soljson-v${full_version}.js"
 
@@ -1752,7 +1750,7 @@ workflows:
           <<: *on_version_tags
           requires:
             - b_ubu_static
-            - b_osx
+#            - b_osx
             - b_win
             - b_ems
 
