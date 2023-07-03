@@ -413,9 +413,9 @@ defaults:
           TERM: xterm
           MAKEFLAGS: -j 2
 
-  - base_ubuntu2004_xlarge: &base_ubuntu2004_xlarge
+  - base_ubuntu2004_large: &base_ubuntu2004_large
       <<: *base_ubuntu2004
-      resource_class: xlarge
+      resource_class: large
       environment:
           TERM: xterm
           MAKEFLAGS: -j 10
@@ -459,9 +459,9 @@ defaults:
         TERM: xterm
         MAKEFLAGS: -j 5
 
-  - base_ubuntu2204_xlarge: &base_ubuntu2204_xlarge
+  - base_ubuntu2204_large: &base_ubuntu2204_large
       <<: *base_ubuntu2204
-      resource_class: xlarge
+      resource_class: large
       environment:
         TERM: xterm
         MAKEFLAGS: -j 10
@@ -849,14 +849,14 @@ jobs:
       - matrix_notify_failure_unless_pr
 
   b_ubu: &b_ubu
-    # this runs 2x faster on xlarge but takes 4x more resources (compared to medium).
+    # this runs 2x faster on large but takes 4x more resources (compared to medium).
     # Enough other jobs depend on it that it's worth it though.
-    <<: *base_ubuntu2204_xlarge
+    <<: *base_ubuntu2204_large
     <<: *steps_build
 
   # x64 ASAN build, for testing for memory related bugs
   b_ubu_asan: &b_ubu_asan
-    # Runs slightly faster on large and xlarge but we only run it nightly so efficiency matters more.
+    # Runs slightly faster on large and large but we only run it nightly so efficiency matters more.
     <<: *base_ubuntu2204
     environment:
       CMAKE_OPTIONS: -DSANITIZE=address
@@ -874,7 +874,7 @@ jobs:
     <<: *steps_build
 
   b_ubu_san_clang:
-    # This runs a bit faster on large and xlarge but on nightly efficiency matters more.
+    # This runs a bit faster on large and large but on nightly efficiency matters more.
     parameters:
       cmake_options:
         type: string
@@ -897,8 +897,8 @@ jobs:
     # We temporarily keep building static release binaries on ubuntu 20.04
     # to avoid glibc incompatibilities.
     # See: https://github.com/ethereum/solidity/issues/13954
-    # On large runs 2x faster than on medium. 3x on xlarge.
-    <<: *base_ubuntu2004_xlarge
+    # On large runs 2x faster than on medium. 3x on large.
+    <<: *base_ubuntu2004_large
     environment:
       TERM: xterm
       MAKEFLAGS: -j 10
