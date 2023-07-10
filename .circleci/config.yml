@@ -1585,12 +1585,20 @@ jobs:
           name: Gather and rename binaries from dependent jobs
           command: |
             mkdir github/
-            cp workspace/solc/solc-static-linux github/solc-static-linux
-            cp workspace/solc/Release/solc.exe  github/solc-windows.exe
-            cp workspace/soljson.js             github/soljson.js
+            cp workspace/solc/solc-static-linux github/static-linux/asolc
+            cp workspace/solc/Release/solc.exe  github/windows/asolc.exe
+            cp workspace/soljson.js             github/asoljson.js
+
+            cd github/static-linux
+            tar --create --file ../asolc-static-linux.tar *
+            cd -
+            
+            cd github/windows
+            tar --create --file ../asolc-windows.tar *
+            cd -
 
             cd github/
-            tar --create --file ../github-binaries.tar *
+            tar --create --file ../github-binaries.tar asolc-static-linux.tar asolc-windows.tar asoljson.js
       - store_artifacts:
           path: github-binaries.tar
       - run:
@@ -1603,9 +1611,9 @@ jobs:
 
             mkdir -p solc-bin/{linux-amd64,windows-amd64,bin}
 
-            mv github/solc-static-linux "solc-bin/linux-amd64/solc-linux-amd64-v${full_version}"
-            mv github/solc-windows.exe  "solc-bin/windows-amd64/solc-windows-amd64-v${full_version}.exe"
-            mv github/soljson.js        "solc-bin/bin/soljson-v${full_version}.js"
+            mv github/static-linux/asolc "solc-bin/linux-amd64/asolc-v${full_version}"
+            mv github/windows/asolc.exe  "solc-bin/windows-amd64/asolc-v${full_version}.exe"
+            mv github/asoljson.js        "solc-bin/bin/asoljson-v${full_version}.js"
 
             cd solc-bin/
             tar --create --file ../solc-bin-binaries.tar *
