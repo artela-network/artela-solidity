@@ -242,9 +242,20 @@ private:
 
 	std::string linkerSymbol(ContractDefinition const& _library) const;
 
+	/// Journal related methods
+	static ContractDefinition const* getStateVarContract(Identifier const* identifier);
+	static std::string getStateVarJournalName(const solidity::frontend::Identifier* identifier);
+	static std::vector<Identifier const*> getStateVarIdentifiersFromExpOrStat(std::variant<
+																			  std::reference_wrapper<Assignment const>,
+																			  std::reference_wrapper<VariableDeclarationStatement const>
+																			  > const& _expOrStat);
+	static std::vector<Identifier const*> getStateIdentifiersFromExpression(Expression const& expression);
+	static bool isStateIdentifier(Identifier const* _identifier) ;
+
 	std::function<std::string()> m_placeholderCallback;
 	YulUtilFunctions& m_utils;
 	std::optional<IRLValue> m_currentLValue;
+	std::optional<std::reference_wrapper<ASTNode const>> m_currentStateNode;
 };
 
 }

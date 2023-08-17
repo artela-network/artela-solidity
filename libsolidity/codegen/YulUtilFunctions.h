@@ -284,6 +284,12 @@ public:
 	/// signature: (array, index) -> slot, offset
 	std::string storageArrayIndexAccessFunction(ArrayType const& _type);
 
+	/// @returns the name of a function that journals the given array and index
+	/// signature: (array, index)
+	std::string storageIndexJournalFunction(Type const& _type);
+
+	std::string storageVarJournalFunction(Type const& _type);
+
 	/// @returns the name of a function that returns the memory address for the
 	/// given array base ref and index.
 	/// Causes invalid opcode on out of range access.
@@ -325,6 +331,11 @@ public:
 	/// @param _mappingType the type of the mapping
 	/// @param _keyType the type of the value provided
 	std::string mappingIndexAccessFunction(MappingType const& _mappingType, Type const& _keyType);
+
+	/// @returns the name of a function that performs index access for mappings.
+	/// @param _mappingType the type of the mapping
+	/// @param _keyType the type of the value provided
+	std::string mappingIndexJournalFunction(MappingType const& _mappingType, Type const& _keyType);
 
 	/// @returns a function that reads a type from storage.
 	/// @param _splitFunctionTypes if false, returns the address and function signature in a

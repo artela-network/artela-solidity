@@ -2331,6 +2331,46 @@ string YulUtilFunctions::storageArrayIndexAccessFunction(ArrayType const& _type)
 	});
 }
 
+string YulUtilFunctions::storageIndexJournalFunction(Type const& _type)
+{
+	bool isValue = _type.isValueType();
+	string functionName = string(isValue ?  "value" : "reference") + "_storage_journal";
+	return m_functionCollector.createFunction(functionName, [&]() {
+		return Whiskers(R"(
+			function <functionName>(base, slot, key<?isValue>, offset</isValue>) {
+				<?isValue>
+				ivjournal(base, slot, key, offset)
+				<!isValue>
+				irjournal(base, slot, key)
+				</isValue>
+			}
+		)")
+		("functionName", functionName)
+		("isValue", isValue)
+		.render();
+	});
+}
+
+string YulUtilFunctions::storageVarJournalFunction(Type const& _type)
+{
+	bool isValue = _type.isValueType();
+	string functionName = string(isValue ?  "value" : "reference") + "_storage_journal";
+	return m_functionCollector.createFunction(functionName, [&]() {
+		return Whiskers(R"(
+			function <functionName>(base, slot, key<?isValue>, offset</isValue>) {
+				<?isValue>
+				ivjournal(base, slot, key, offset)
+				<!isValue>
+				irjournal(base, slot, key)
+				</isValue>
+			}
+		)")
+		("functionName", functionName)
+		("isValue", isValue)
+		.render();
+	});
+}
+
 string YulUtilFunctions::memoryArrayIndexAccessFunction(ArrayType const& _type)
 {
 	string functionName = "memory_array_index_access_" + _type.identifier();
@@ -2640,6 +2680,42 @@ string YulUtilFunctions::mappingIndexAccessFunction(MappingType const& _mappingT
 	});
 }
 
+string YulUtilFunctions::mappingIndexJournalFunction(MappingType const& _mappingType, Type const& _keyType)
+{
+	string functionName = "mapping_index_journal_" + _mappingType.identifier() + "_of_" + _keyType.identifier();
+	return m_functionCollector.createFunction(functionName, [&]() {
+		if (_mappingType.keyType()->isDynamicallySized())
+			return Whiskers(R"(
+				function <functionName>(base , slot <?+key>,</+key> <key>) {
+					convertedKey := <convert>(<key> <?+key>,</+key>)
+                    irjournal(base, slot, convertedKey)
+				}
+			)")
+			("functionName", functionName)
+			("key", suffixedVariableNameList("key_", 0, _keyType.sizeOnStack()))
+			("convert", conversionFunction(_keyType, *_mappingType.keyType()))
+			.render();
+		else
+		{
+			solAssert(CompilerUtils::freeMemoryPointer >= 0x40, "");
+			solAssert(!_mappingType.keyType()->isDynamicallyEncoded(), "");
+			solAssert(_mappingType.keyType()->calldataEncodedSize(false) <= 0x20, "");
+			Whiskers templ(R"(
+				function <functionName>(base , slot <key>) {
+                    ivjournal(base, slot, <convertedKey>, 0)
+				}
+			)");
+			templ("functionName", functionName);
+			templ("key", _keyType.sizeOnStack() == 1 ? ", key" : "");
+			if (_keyType.sizeOnStack() == 0)
+				templ("convertedKey", conversionFunction(_keyType, *_mappingType.keyType()) + "()");
+			else
+				templ("convertedKey", conversionFunction(_keyType, *_mappingType.keyType()) + "(key)");
+			return templ.render();
+		}
+	});
+}
+
 string YulUtilFunctions::readFromStorage(Type const& _type, size_t _offset, bool _splitFunctionTypes)
 {
 	if (_type.isValueType())
@@ -2798,7 +2874,9 @@ string YulUtilFunctions::updateStorageValueFunction(
 			return Whiskers(R"(
 				function <functionName>(slot, <offset><fromValues>) {
 					let <toValues> := <convert>(<fromValues>)
+					vvjournal(slot, <journalOffset>)
 					sstore(slot, <update>(sload(slot), <offset><prepare>(<toValues>)))
+					vvjournal(slot, <journalOffset>)
 				}
 
 			)")
@@ -2808,6 +2886,7 @@ string YulUtilFunctions::updateStorageValueFunction(
 					updateByteSliceFunction(_toType.storageBytes(), *_offset) :
 					updateByteSliceFunctionDynamic(_toType.storageBytes())
 			)
+			("journalOffset", _offset.has_value() ? "0" : "offset")
 			("offset", _offset.has_value() ? "" : "offset, ")
 			("convert", conversionFunction(_fromType, _toType))
 			("fromValues", suffixedVariableNameList("value_", 0, _fromType.sizeOnStack()))
@@ -2830,7 +2909,9 @@ string YulUtilFunctions::updateStorageValueFunction(
 			return Whiskers(R"(
 				function <functionName>(slot<?dynamicOffset>, offset</dynamicOffset>) {
 					<?dynamicOffset>if offset { <panic>() }</dynamicOffset>
+                    vrjournal(slot)
 					<copyToStorage>(slot)
+                    vrjournal(slot)
 				}
 			)")
 			("functionName", functionName)
@@ -2854,7 +2935,9 @@ string YulUtilFunctions::updateStorageValueFunction(
 		Whiskers templ(R"(
 			function <functionName>(slot, <?dynamicOffset>offset, </dynamicOffset><value>) {
 				<?dynamicOffset>if offset { <panic>() }</dynamicOffset>
+                vrjournal(slot)
 				<copyToStorage>(slot, <value>)
+                vrjournal(slot)
 			}
 		)");
 		templ("functionName", functionName);

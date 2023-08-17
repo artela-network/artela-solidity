@@ -451,6 +451,15 @@ bool IRGeneratorForStatements::visit(Assignment const& _assignment)
 		) :
 		_assignment.rightHandSide();
 
+	// set current state expression
+	bool hasParentStateNode = m_currentStateNode.has_value();
+	ASTNode const& parentStateNode = m_currentStateNode->get();
+	auto stateIdentifiers = getStateIdentifiersFromExpression(_assignment.leftHandSide());
+	if (!stateIdentifiers.empty())
+		m_currentStateNode.emplace(_assignment);
+	else
+		m_currentStateNode.reset();
+
 	_assignment.leftHandSide().accept(*this);
 
 	solAssert(!!m_currentLValue, "LValue not retrieved.");
@@ -483,6 +492,11 @@ bool IRGeneratorForStatements::visit(Assignment const& _assignment)
 			define(_assignment, value);
 	}
 
+	// reset to parent if we have in a nested assignment
+	if (hasParentStateNode)
+		m_currentStateNode.emplace(parentStateNode);
+	else
+	    m_currentStateNode.reset();
 	m_currentLValue.reset();
 	return false;
 }
@@ -1731,7 +1745,24 @@ void IRGeneratorForStatements::endVisit(MemberAccess const& _memberAccess)
 			memberFunctionType->kind() == FunctionType::Kind::ArrayPop
 		)
 		{
-			// Nothing to do.
+			// journal index info if currently we are in a state operation
+			if (m_currentStateNode.has_value())
+			{
+				ArrayType const& arrayType = dynamic_cast<ArrayType const&>(*memberFunctionType->selfType());
+
+				bool isValue = arrayType.baseType()->isValueType();
+				Whiskers journalTmpl("<indexJournal>(<base>,<slot>,<key><?isValue>,</isValue><offset>)\n");
+				journalTmpl("indexJournal", m_utils.storageIndexJournalFunction(*arrayType.baseType()));
+				journalTmpl("base", IRVariable(_memberAccess.expression()).part("slot").name());
+				journalTmpl("slot", IRVariable(_memberAccess).part("self").name());
+				if (memberFunctionType->kind() == FunctionType::Kind::ArrayPush)
+					journalTmpl("key", m_utils.arrayLengthFunction(arrayType));
+				else
+					journalTmpl("key", "sub(" + m_utils.arrayLengthFunction(arrayType) + ", 1)");
+				journalTmpl("isValue", isValue);
+//				journalTmpl("offset", isValue ? offset : "");
+				appendCode() << journalTmpl.render();
+			}
 		}
 		else
 		{
@@ -1989,6 +2020,20 @@ void IRGeneratorForStatements::endVisit(MemberAccess const& _memberAccess)
 				type(_memberAccess),
 				IRLValue::Storage{slot, offsets.second}
 			});
+
+			if (m_currentStateNode.has_value())
+			{
+				bool isValue = structType.memberType(member)->isValueType();
+				Whiskers journalTmpl("<indexJournal>(<base>,<slot>,<key><?isValue>,</isValue><offset>)\n");
+				journalTmpl("indexJournal", m_utils.storageIndexJournalFunction(*structType.memberType(member)));
+				journalTmpl("base",  expression.part("slot").name());
+				journalTmpl("slot", slot);
+				journalTmpl("key", m_utils.conversionFunction(*TypeProvider::stringLiteral(member), *TypeProvider::stringMemory()) + "()");
+				journalTmpl("isValue", isValue);
+				journalTmpl("offset", isValue ? offsets.first.str() : "");
+				appendCode() << journalTmpl.render();
+			}
+
 			break;
 		}
 		case DataLocation::Memory:
@@ -2256,6 +2301,17 @@ void IRGeneratorForStatements::endVisit(IndexAccess const& _indexAccess)
 				0u
 			}
 		});
+
+		// journal index info if currently we are in a state operation
+		if (m_currentStateNode.has_value())
+		{
+			Whiskers journalTmpl("<indexJournal>(<base>,<slot><?+key>,<key></+key>)\n");
+			journalTmpl("slot", slot);
+			journalTmpl("indexJournal", m_utils.mappingIndexJournalFunction(mappingType, keyType));
+			journalTmpl("base", IRVariable(_indexAccess.baseExpression()).commaSeparatedList());
+			journalTmpl("key", IRVariable(*_indexAccess.indexExpression()).commaSeparatedList());
+			appendCode() << journalTmpl.render();
+		}
 	}
 	else if (baseType.category() == Type::Category::Array || baseType.category() == Type::Category::ArraySlice)
 	{
@@ -2290,6 +2346,20 @@ void IRGeneratorForStatements::endVisit(IndexAccess const& _indexAccess)
 					*_indexAccess.annotation().type,
 					IRLValue::Storage{slot, offset}
 				});
+
+				// journal index info if currently we are in a state operation
+				if (m_currentStateNode.has_value())
+				{
+					bool isValue = arrayType.baseType()->isValueType();
+                    Whiskers journalTmpl("<indexJournal>(<base>,<slot>,<key><?isValue>,</isValue><offset>)\n");
+					journalTmpl("indexJournal", m_utils.storageIndexJournalFunction(*arrayType.baseType()));
+					journalTmpl("base", IRVariable(_indexAccess.baseExpression()).part("slot").name());
+					journalTmpl("slot", slot);
+					journalTmpl("key", IRVariable(*_indexAccess.indexExpression()).name());
+					journalTmpl("isValue", isValue);
+					journalTmpl("offset", isValue ? offset : "");
+                    appendCode() << journalTmpl.render();
+				}
 
 				break;
 			}
@@ -2525,6 +2595,7 @@ void IRGeneratorForStatements::handleVariableReference(
 			IRLValue::Stack{m_context.localVariable(_variable)}
 		});
 	else if (m_context.isStateVariable(_variable))
+	{
 		setLValue(_referencingExpression, IRLValue{
 			*_variable.annotation().type,
 			IRLValue::Storage{
@@ -2532,6 +2603,7 @@ void IRGeneratorForStatements::handleVariableReference(
 				m_context.storageLocationOfStateVariable(_variable).second
 			}
 		});
+	}
 	else
 		solAssert(false, "Invalid variable kind.");
 }
@@ -3400,3 +3472,65 @@ string IRGeneratorForStatements::linkerSymbol(ContractDefinition const& _library
 	solAssert(_library.isLibrary());
 	return "linkersymbol(" + util::escapeAndQuoteString(_library.fullyQualifiedName()) + ")";
 }
+
+ContractDefinition const* IRGeneratorForStatements::getStateVarContract(const solidity::frontend::Identifier* identifier)
+{
+	auto scope = dynamic_cast<ScopableAnnotation const*>(&identifier->annotation().referencedDeclaration->annotation());
+	return scope->contract;
+}
+
+string IRGeneratorForStatements::getStateVarJournalName(const solidity::frontend::Identifier* identifier)
+{
+	return getStateVarContract(identifier)->name() + "." + identifier->name();
+}
+
+bool IRGeneratorForStatements::isStateIdentifier(Identifier const* _identifier)
+{
+	auto varDecl =
+		dynamic_cast<VariableDeclaration const*>(_identifier->annotation().referencedDeclaration);
+	return _identifier
+		   && (_identifier->annotation().type->dataStoredIn(DataLocation::Storage)
+			   || (varDecl && varDecl->isStateVariable()));
+}
+
+vector<Identifier const*> IRGeneratorForStatements::getStateVarIdentifiersFromExpOrStat(variant<
+																			   reference_wrapper<Assignment const>,
+																			   reference_wrapper<VariableDeclarationStatement const>
+																			   > const& _expOrStat)
+{
+	if (holds_alternative<reference_wrapper<Assignment const>>(_expOrStat))
+		return getStateIdentifiersFromExpression(get<reference_wrapper<Assignment const>>(_expOrStat).get().leftHandSide());
+	else if (holds_alternative<reference_wrapper<VariableDeclarationStatement const>>(_expOrStat))
+		return getStateIdentifiersFromExpression(*get<reference_wrapper<VariableDeclarationStatement const>>(_expOrStat).get().initialValue());
+
+	solAssert(false, "not implemented");
+}
+
+vector<Identifier const*> IRGeneratorForStatements::getStateIdentifiersFromExpression(Expression const& _expression)
+{
+	auto* currentExpression = &const_cast<Expression&>(_expression);
+	if (auto const* indexAccess = dynamic_cast<IndexAccess const*>(currentExpression))
+		return getStateIdentifiersFromExpression(indexAccess->baseExpression());
+	else if (auto const* indexRangeAccess = dynamic_cast<IndexRangeAccess const*>(currentExpression))
+		return getStateIdentifiersFromExpression(indexRangeAccess->baseExpression());
+	else if (auto const* memberAccess = dynamic_cast<MemberAccess const*>(currentExpression))
+		return getStateIdentifiersFromExpression(memberAccess->expression());
+	else if (auto const* identifier = dynamic_cast<Identifier*>(currentExpression))
+	{
+		if (isStateIdentifier(identifier))
+			return {identifier};
+	}
+	else if (auto const* tupleExpression = dynamic_cast<TupleExpression*>(currentExpression))
+	{
+		vector<Identifier const*> res;
+		for (const auto& component : tupleExpression->components())
+		{
+			auto componentIdentifiers = getStateIdentifiersFromExpression(*component);
+			res.insert(res.end(), componentIdentifiers.begin(), componentIdentifiers.end());
+		}
+		return res;
+	}
+
+	return {};
+}
+
