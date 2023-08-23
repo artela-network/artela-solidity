@@ -1528,12 +1528,14 @@ string YulUtilFunctions::storageArrayPopFunction(ArrayType const& _type)
 
 	string functionName = "array_pop_" + _type.identifier();
 	return m_functionCollector.createFunction(functionName, [&]() {
+		bool isValue = _type.baseType()->isValueType();
 		return Whiskers(R"(
 			function <functionName>(array) {
 				let oldLen := <fetchLength>(array)
 				if iszero(oldLen) { <panic>() }
 				let newLen := sub(oldLen, 1)
 				let slot, offset := <indexAccess>(array, newLen)
+				<indexJournal>(array, slot, newLen<?isValue>, offset</isValue>)
 				<?+setToZero><setToZero>(slot, offset)</+setToZero>
 				sstore(array, newLen)
 			})")
@@ -1541,6 +1543,8 @@ string YulUtilFunctions::storageArrayPopFunction(ArrayType const& _type)
 			("panic", panicFunction(PanicCode::EmptyArrayPop))
 			("fetchLength", arrayLengthFunction(_type))
 			("indexAccess", storageArrayIndexAccessFunction(_type))
+			("indexJournal", storageIndexJournalFunction(*_type.baseType()))
+			("isValue", isValue)
 			(
 				"setToZero",
 				_type.baseType()->category() != Type::Category::Mapping ? storageSetToZeroFunction(*_type.baseType()) : ""
@@ -1624,9 +1628,11 @@ string YulUtilFunctions::storageArrayPushFunction(ArrayType const& _type, Type c
 							// We need to copy data
 							let dataArea := <dataAreaFunction>(array)
 							data := and(data, not(0xff))
+							vrjournal(array)
 							sstore(dataArea, or(and(0xff, value), data))
 							// New length is 32, encoded as (32 * 2 + 1)
 							sstore(array, 65)
+							vrjournal(array)
 						}
 						default {
 							data := add(data, 2)
@@ -1634,7 +1640,9 @@ string YulUtilFunctions::storageArrayPushFunction(ArrayType const& _type, Type c
 							let valueShifted := <shl>(shiftBits, and(0xff, value))
 							let mask := <shl>(shiftBits, 0xff)
 							data := or(and(data, not(mask)), valueShifted)
+							vrjournal(array)
 							sstore(array, data)
+							vrjournal(array)
 						}
 					}
 					default {
@@ -1797,6 +1805,13 @@ string YulUtilFunctions::clearStorageStructFunction(StructType const& _type)
 				auto const& slotDiff = _type.storageOffsetsOfMember(member.name).first;
 				if (!slotsCleared.count(slotDiff))
 				{
+					Whiskers templ(R"(
+						<indexJournal>(slot, slot, i)
+						vvjournal(elementDstSlot, 0)
+						sstore(add(slot, <slotDiff>), 0)
+						vvjournal(elementDstSlot, 0)
+					)");
+
 					memberSetValues.emplace_back().emplace("clearMember", "sstore(add(slot, " + slotDiff.str() + "), 0)");
 					slotsCleared.emplace(slotDiff);
 				}
@@ -1878,8 +1893,10 @@ string YulUtilFunctions::copyArrayToStorageFunction(ArrayType const& _fromType, 
 						let <stackItems> := srcPtr
 					</fromStorage>
 
+					<indexJournal>(slot, elementSlot, i)
+                    <?stringOrByteArray>vrjournal(elementSlot)</stringOrByteArray>
 					<updateStorageValue>(elementSlot, <stackItems>)
-
+					<?stringOrByteArray>vrjournal(elementSlot)</stringOrByteArray>
 					srcPtr := add(srcPtr, <srcStride>)
 
 					elementSlot := add(elementSlot, <storageSize>)
@@ -1889,6 +1906,7 @@ string YulUtilFunctions::copyArrayToStorageFunction(ArrayType const& _fromType, 
 		if (_fromType.dataStoredIn(DataLocation::Storage))
 			solAssert(!_fromType.isValueType(), "");
 		templ("functionName", functionName);
+		templ("stringOrByteArray", _toType.isByteArrayOrString());
 		bool fromCalldata = _fromType.dataStoredIn(DataLocation::CallData);
 		templ("isFromDynamicCalldata", _fromType.isDynamicallySized() && fromCalldata);
 		templ("fromStorage", _fromType.dataStoredIn(DataLocation::Storage));
@@ -1912,6 +1930,7 @@ string YulUtilFunctions::copyArrayToStorageFunction(ArrayType const& _fromType, 
 			0,
 			_fromType.baseType()->stackItems().size()
 		));
+		templ("indexJournal", storageIndexJournalFunction(*_toType.baseType()));
 		templ("updateStorageValue", updateStorageValueFunction(*_fromType.baseType(), *_toType.baseType(), 0));
 		templ("srcStride",
 			fromCalldata ?
@@ -2042,8 +2061,25 @@ string YulUtilFunctions::copyValueArrayToStorageFunction(ArrayType const& _fromT
 				for { let i := 0 } lt(i, fullSlots) { i := add(i, 1) } {
 					let dstSlotValue := 0
 					<?sameTypeFromStorage>
-						dstSlotValue := <maskFull>(srcSlotValue)
-						<updateSrcPtr>
+       					dstSlotValue := <maskFull>(srcSlotValue)
+				 		<updateSrcPtr>
+				 		let elementDstSlot = add(dstSlot, i)
+						<?multipleItemsPerSlotDst>
+                        let elemCount := mul(i, <itemsPerSlot>)
+						for { let j := 0 } lt(j, <itemsPerSlot>) { j := add(j, 1) } {
+						    <indexJournal>(dst, elementDstSlot, add(elemCount, j), <srcStride>)
+							vvjournal(elementDstSlot, mul(<srcStride>, j))
+						}
+                        sstore(elementDstSlot, dstSlotValue)
+                        for { let j := 0 } lt(j, <itemsPerSlot>) { j := add(j, 1) } {
+							vvjournal(elementDstSlot, mul(<srcStride>, j))
+						}
+                        <!multipleItemsPerSlotDst>
+                        <indexJournal>(dst, elementDstSlot, i)
+						vvjournal(elementDstSlot, 0)
+						sstore(elementDstSlot, dstSlotValue)
+						vvjournal(elementDstSlot, 0)
+                        </multipleItemsPerSlotDst>
 					<!sameTypeFromStorage>
 						<?multipleItemsPerSlotDst>for { let j := 0 } lt(j, <itemsPerSlot>) { j := add(j, 1) } </multipleItemsPerSlotDst>
 						{
@@ -2055,27 +2091,43 @@ string YulUtilFunctions::copyValueArrayToStorageFunction(ArrayType const& _fromT
 							let <stackItems> := <readFromMemoryOrCalldata>(srcPtr)
 							</isFromStorage>
 							let itemValue := <prepareStore>(<stackItems>)
+							<?multipleItemsPerSlotDst>
+							let dstStride := <dstStride>
+							<indexJournal>(dst, dstSlot, i, dstStride)
+							<!multipleItemsPerSlotDst>
+							<indexJournal>(dst, dstSlot, i)
+							</multipleItemsPerSlotDst>
 							dstSlotValue :=
 							<?multipleItemsPerSlotDst>
-								<updateByteSlice>(dstSlotValue, mul(<dstStride>, j), itemValue)
+								<updateByteSlice>(dstSlotValue, dstStride, itemValue)
 							<!multipleItemsPerSlotDst>
 								itemValue
 							</multipleItemsPerSlotDst>
 
 							<updateSrcPtr>
+
+							let elementDstSlot = add(dstSlot, i)
+							vvjournal(elementDstSlot, </multipleItemsPerSlotDst> 0 <!multipleItemsPerSlotDst> dstStride </multipleItemsPerSlotDst>)
+							sstore(elementDstSlot, dstSlotValue)
+							vvjournal(elementDstSlot, </multipleItemsPerSlotDst> 0 <!multipleItemsPerSlotDst> dstStride </multipleItemsPerSlotDst>)
 						}
 					</sameTypeFromStorage>
-
-					sstore(add(dstSlot, i), dstSlotValue)
 				}
 
 				<?multipleItemsPerSlotDst>
 					let spill := sub(length, mul(fullSlots, <itemsPerSlot>))
 					if gt(spill, 0) {
 						let dstSlotValue := 0
+                        let storageSlot := add(dstSlot, fullSlots)
 						<?sameTypeFromStorage>
 							dstSlotValue := <maskBytes>(srcSlotValue, mul(spill, <srcStride>))
 							<updateSrcPtr>
+
+							for { let j := 0 } lt(j, spill) { j := add(j, 1) } {
+                                let offset := mul(<srcStride>, add(j, 1))
+								<indexJournal>(dst, storageSlot, j, offset)
+								vvjournal(storageSlot, offset)
+							}
 						<!sameTypeFromStorage>
 							for { let j := 0 } lt(j, spill) { j := add(j, 1) } {
 								<?isFromStorage>
@@ -2089,9 +2141,19 @@ string YulUtilFunctions::copyValueArrayToStorageFunction(ArrayType const& _fromT
 								dstSlotValue := <updateByteSlice>(dstSlotValue, mul(<dstStride>, j), itemValue)
 
 								<updateSrcPtr>
+
+                                let offset := mul(<srcStride>, add(j, 1))
+								<indexJournal>(dst, storageSlot, j, offset)
+								vvjournal(storageSlot, offset)
 							}
+
 						</sameTypeFromStorage>
-						sstore(add(dstSlot, fullSlots), dstSlotValue)
+                        sstore(storageSlot, dstSlotValue)
+
+						for { let j := 0 } lt(j, spill) { j := add(j, 1) } {
+							let offset := mul(<srcStride>, add(j, 1))
+							vvjournal(storageSlot, offset)
+						}
 					}
 				</multipleItemsPerSlotDst>
 			}
@@ -2116,6 +2178,7 @@ string YulUtilFunctions::copyValueArrayToStorageFunction(ArrayType const& _fromT
 			0,
 			_fromType.baseType()->stackItems().size()
 		));
+		templ("indexJournal", storageIndexJournalFunction(*_toType.baseType()));
 		unsigned itemsPerSlot = 32 / _toType.storageStride();
 		templ("itemsPerSlot", to_string(itemsPerSlot));
 		templ("multipleItemsPerSlotDst", itemsPerSlot > 1);
@@ -2932,17 +2995,20 @@ string YulUtilFunctions::updateStorageValueFunction(
 			solAssert(toReferenceType->category() == fromReferenceType->category(), "");
 		solAssert(_offset.value_or(0) == 0, "");
 
+		bool isByteArrayOrString = _toType.category() == Type::Category::Array && dynamic_cast<ArrayType const&>(_toType).isByteArrayOrString();
+
 		Whiskers templ(R"(
 			function <functionName>(slot, <?dynamicOffset>offset, </dynamicOffset><value>) {
 				<?dynamicOffset>if offset { <panic>() }</dynamicOffset>
-                vrjournal(slot)
+                <?isByteArrayOrString>vrjournal(slot)</isByteArrayOrString>
 				<copyToStorage>(slot, <value>)
-                vrjournal(slot)
+                <?isByteArrayOrString>vrjournal(slot)</isByteArrayOrString>
 			}
 		)");
 		templ("functionName", functionName);
 		templ("dynamicOffset", !_offset.has_value());
 		templ("panic", panicFunction(PanicCode::Generic));
+		templ("isByteArrayOrString", isByteArrayOrString);
 		templ("value", suffixedVariableNameList("value_", 0, _fromType.sizeOnStack()));
 		if (_fromType.category() == Type::Category::Array)
 			templ("copyToStorage", copyArrayToStorageFunction(
@@ -3733,7 +3799,14 @@ string YulUtilFunctions::copyStructToStorageFunction(StructType const& _from, St
 						</isValueType>
 				</fromStorage>
 
-				<updateStorageValue>(memberSlot, <memberValues>)
+                <?isValueType>
+					<indexJournal>(slot, memberSlot, <convertedKey>, <memberStorageOffset>)
+				<!isValueType>
+					<indexJournal>(slot, memberSlot, <convertedKey>)
+				</isValueType>
+                <?stringOrByteArray>vrjournal(memberSlot)</stringOrByteArray>
+ 				<updateStorageValue>(memberSlot, <memberValues>)
+                <?stringOrByteArray>vrjournal(memberSlot)</stringOrByteArray>
 			)");
 			bool fromCalldata = _from.location() == DataLocation::CallData;
 			t("fromCalldata", fromCalldata);
@@ -3742,8 +3815,10 @@ string YulUtilFunctions::copyStructToStorageFunction(StructType const& _from, St
 			bool fromStorage = _from.location() == DataLocation::Storage;
 			t("fromStorage", fromStorage);
 			t("isValueType", memberType.isValueType());
+			t("stringOrByteArray", memberType.category() == Type::Category::Array && dynamic_cast<ArrayType const&>(memberType).isByteArrayOrString());
 			t("memberValues", suffixedVariableNameList("memberValue_", 0, memberType.stackItems().size()));
-
+			t("indexJournal", storageIndexJournalFunction(memberType));
+			t("convertedKey", conversionFunction(*TypeProvider::stringLiteral(structMembers[i].name), *TypeProvider::stringMemory()) + "()");
 			t("memberStorageSlotDiff", slotDiff.str());
 			if (fromCalldata)
 			{
@@ -3774,6 +3849,7 @@ string YulUtilFunctions::copyStructToStorageFunction(StructType const& _from, St
 				*toStructMembers[i].type,
 				optional<unsigned>{offset}
 			));
+			t("memberStorageOffset", toCompactHexWithPrefix(offset));
 			memberParams[i]["updateMemberCall"] = t.render();
 		}
 		templ("member", memberParams);
