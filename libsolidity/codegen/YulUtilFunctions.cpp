@@ -1628,11 +1628,9 @@ string YulUtilFunctions::storageArrayPushFunction(ArrayType const& _type, Type c
 							// We need to copy data
 							let dataArea := <dataAreaFunction>(array)
 							data := and(data, not(0xff))
-							vrjournal(array)
 							sstore(dataArea, or(and(0xff, value), data))
 							// New length is 32, encoded as (32 * 2 + 1)
 							sstore(array, 65)
-							vrjournal(array)
 						}
 						default {
 							data := add(data, 2)
@@ -1640,9 +1638,7 @@ string YulUtilFunctions::storageArrayPushFunction(ArrayType const& _type, Type c
 							let valueShifted := <shl>(shiftBits, and(0xff, value))
 							let mask := <shl>(shiftBits, 0xff)
 							data := or(and(data, not(mask)), valueShifted)
-							vrjournal(array)
 							sstore(array, data)
-							vrjournal(array)
 						}
 					}
 					default {
@@ -1655,6 +1651,7 @@ string YulUtilFunctions::storageArrayPushFunction(ArrayType const& _type, Type c
 					if iszero(lt(oldLen, <maxArrayLength>)) { <panic>() }
 					sstore(array, add(oldLen, 1))
 					let slot, offset := <indexAccess>(array, oldLen)
+					<indexJournal>(array, slot, oldLen<?isValue>, offset</isValue>)
 					<storeValue>(slot, offset <values>)
 				</isByteArrayOrString>
 			})")
@@ -1664,7 +1661,9 @@ string YulUtilFunctions::storageArrayPushFunction(ArrayType const& _type, Type c
 			("extractByteArrayLength", _type.isByteArrayOrString() ? extractByteArrayLengthFunction() : "")
 			("dataAreaFunction", arrayDataAreaFunction(_type))
 			("isByteArrayOrString", _type.isByteArrayOrString())
+			("isValue", _type.baseType()->isValueType())
 			("indexAccess", storageArrayIndexAccessFunction(_type))
+			("indexJournal", storageIndexJournalFunction(*_type.baseType()))
 			("storeValue", updateStorageValueFunction(*_fromType, *_type.baseType()))
 			("maxArrayLength", (u256(1) << 64).str())
 			("shl", shiftLeftFunctionDynamic())
@@ -1798,6 +1797,7 @@ string YulUtilFunctions::clearStorageStructFunction(StructType const& _type)
 		set<u256> slotsCleared;
 		for (auto const& member: structMembers)
 		{
+			string memberNameConversionFunc = conversionFunction(*TypeProvider::stringLiteral(member.name), *TypeProvider::stringMemory()) + "()";
 			if (member.type->category() == Type::Category::Mapping)
 				continue;
 			if (member.type->storageBytes() < 32)
@@ -1806,13 +1806,17 @@ string YulUtilFunctions::clearStorageStructFunction(StructType const& _type)
 				if (!slotsCleared.count(slotDiff))
 				{
 					Whiskers templ(R"(
-						<indexJournal>(slot, slot, i)
-						vvjournal(elementDstSlot, 0)
+						<indexJournal>(slot, add(slot, <slotDiff>), <convertedKey>, <offset>)
+						vvjournal(slot, 0)
 						sstore(add(slot, <slotDiff>), 0)
-						vvjournal(elementDstSlot, 0)
+						vvjournal(slot, 0)
 					)");
+					templ("indexJournal", storageIndexJournalFunction(*member.type));
+					templ("slotDiff", slotDiff.str());
+					templ("convertedKey", memberNameConversionFunc);
+					templ("offset", toCompactHexWithPrefix(_type.storageOffsetsOfMember(member.name).second));
 
-					memberSetValues.emplace_back().emplace("clearMember", "sstore(add(slot, " + slotDiff.str() + "), 0)");
+					memberSetValues.emplace_back().emplace("clearMember", templ.render());
 					slotsCleared.emplace(slotDiff);
 				}
 			}
@@ -1822,8 +1826,12 @@ string YulUtilFunctions::clearStorageStructFunction(StructType const& _type)
 				solAssert(memberStorageOffset == 0, "");
 
 				memberSetValues.emplace_back().emplace("clearMember", Whiskers(R"(
+						<indexJournal>(slot, add(slot, <memberSlotDiff>), <convertedKey> <?isValue>, <memberStorageOffset></isValue>)
 						<setZero>(add(slot, <memberSlotDiff>), <memberStorageOffset>)
 					)")
+				    ("indexJournal", storageIndexJournalFunction(*member.type))
+				    ("isValue", member.type->isValueType())
+					("convertedKey", memberNameConversionFunc)
 					("setZero", storageSetToZeroFunction(*member.type))
 					("memberSlotDiff",  memberSlotDiff.str())
 					("memberStorageOffset", to_string(memberStorageOffset))
@@ -2750,7 +2758,7 @@ string YulUtilFunctions::mappingIndexJournalFunction(MappingType const& _mapping
 		if (_mappingType.keyType()->isDynamicallySized())
 			return Whiskers(R"(
 				function <functionName>(base , slot <?+key>,</+key> <key>) {
-					convertedKey := <convert>(<key> <?+key>,</+key>)
+					let convertedKey := <convert>(<key>)
                     irjournal(base, slot, convertedKey)
 				}
 			)")
@@ -3804,9 +3812,7 @@ string YulUtilFunctions::copyStructToStorageFunction(StructType const& _from, St
 				<!isValueType>
 					<indexJournal>(slot, memberSlot, <convertedKey>)
 				</isValueType>
-                <?stringOrByteArray>vrjournal(memberSlot)</stringOrByteArray>
  				<updateStorageValue>(memberSlot, <memberValues>)
-                <?stringOrByteArray>vrjournal(memberSlot)</stringOrByteArray>
 			)");
 			bool fromCalldata = _from.location() == DataLocation::CallData;
 			t("fromCalldata", fromCalldata);
@@ -3815,7 +3821,6 @@ string YulUtilFunctions::copyStructToStorageFunction(StructType const& _from, St
 			bool fromStorage = _from.location() == DataLocation::Storage;
 			t("fromStorage", fromStorage);
 			t("isValueType", memberType.isValueType());
-			t("stringOrByteArray", memberType.category() == Type::Category::Array && dynamic_cast<ArrayType const&>(memberType).isByteArrayOrString());
 			t("memberValues", suffixedVariableNameList("memberValue_", 0, memberType.stackItems().size()));
 			t("indexJournal", storageIndexJournalFunction(memberType));
 			t("convertedKey", conversionFunction(*TypeProvider::stringLiteral(structMembers[i].name), *TypeProvider::stringMemory()) + "()");

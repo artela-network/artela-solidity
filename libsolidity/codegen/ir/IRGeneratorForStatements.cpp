@@ -2305,12 +2305,30 @@ void IRGeneratorForStatements::endVisit(IndexAccess const& _indexAccess)
 		// journal index info if currently we are in a state operation
 		if (m_currentStateNode.has_value())
 		{
-			Whiskers journalTmpl("<indexJournal>(<base>,<slot><?+key>,<key></+key>)\n");
-			journalTmpl("slot", slot);
-			journalTmpl("indexJournal", m_utils.mappingIndexJournalFunction(mappingType, keyType));
-			journalTmpl("base", IRVariable(_indexAccess.baseExpression()).commaSeparatedList());
-			journalTmpl("key", IRVariable(*_indexAccess.indexExpression()).commaSeparatedList());
-			appendCode() << journalTmpl.render();
+			// we probably in a nested index access, need to find out
+			// whether current identifier belongs to the cached one
+			bool render = false;
+			if (auto assignment = dynamic_cast<Assignment const*>(&m_currentStateNode->get()))
+			{
+				auto currentStateIdentifiers = getStateIdentifiersFromExpression(_indexAccess);
+				auto cachedStateIdentifiers = getStateIdentifiersFromExpression(assignment->leftHandSide());
+
+				if (!currentStateIdentifiers.empty() && !cachedStateIdentifiers.empty())
+					// check if currentStateIdentifier[0] in cachedStateIdentifiers
+					render = std::find_if(cachedStateIdentifiers.begin(), cachedStateIdentifiers.end(), [&](auto cachedIdentifier) {
+						return cachedIdentifier->id() == currentStateIdentifiers[0]->id();
+					}) != cachedStateIdentifiers.end();
+			}
+
+			if (render)
+			{
+				Whiskers journalTmpl("<indexJournal>(<base>,<slot><?+key>,<key></+key>)\n");
+				journalTmpl("slot", slot);
+				journalTmpl("indexJournal", m_utils.mappingIndexJournalFunction(mappingType, keyType));
+				journalTmpl("base", IRVariable(_indexAccess.baseExpression()).commaSeparatedList());
+				journalTmpl("key", IRVariable(*_indexAccess.indexExpression()).commaSeparatedList());
+				appendCode() << journalTmpl.render();
+			}
 		}
 	}
 	else if (baseType.category() == Type::Category::Array || baseType.category() == Type::Category::ArraySlice)
