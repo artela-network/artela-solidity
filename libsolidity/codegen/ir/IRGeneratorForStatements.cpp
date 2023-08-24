@@ -946,6 +946,44 @@ bool IRGeneratorForStatements::visit(BinaryOperation const& _binOp)
 	return false;
 }
 
+bool IRGeneratorForStatements::visit(FunctionCall const& _functionCall)
+{
+	FunctionTypePointer functionType = nullptr;
+	auto functionCallKind = *_functionCall.annotation().kind;
+	if (functionCallKind == FunctionCallKind::StructConstructorCall)
+	{
+		auto const& type = dynamic_cast<TypeType const&>(*_functionCall.expression().annotation().type);
+		auto const& structType = dynamic_cast<StructType const&>(*type.actualType());
+		functionType = structType.constructorType();
+	}
+	else
+		functionType = dynamic_cast<FunctionType const*>(_functionCall.expression().annotation().type);
+
+	// check if there is any input state params
+	auto funcParamTypePtrs = functionType->parameterTypesIncludingSelf();
+	vector<Type const*> inputStateParams;
+	for (auto paramType : funcParamTypePtrs)
+		if (paramType->dataStoredIn(DataLocation::Storage))
+			inputStateParams.emplace_back(paramType);
+
+	// if input has state param, start the journal
+	m_parentStateNode.reset();
+	bool hasParentStateNode = m_currentStateNode.has_value();
+	if (hasParentStateNode)
+		m_parentStateNode.emplace(m_currentStateNode->get());
+
+	if (!inputStateParams.empty())
+	{
+		auto stateIdentifiers = getStateIdentifiersFromExpression(_functionCall.expression());
+		if (!stateIdentifiers.empty())
+			m_currentStateNode.emplace(_functionCall);
+		else
+			m_currentStateNode.reset();
+	}
+
+	return true;
+}
+
 void IRGeneratorForStatements::endVisit(FunctionCall const& _functionCall)
 {
 	setLocation(_functionCall);
@@ -1679,6 +1717,29 @@ void IRGeneratorForStatements::endVisit(FunctionCall const& _functionCall)
 	default:
 		solUnimplemented("FunctionKind " + toString(static_cast<int>(functionType->kind())) + " not yet implemented");
 	}
+
+	// check if there is any input state params
+	auto funcParamTypePtrs = functionType->parameterTypes();
+	if (functionType->hasBoundFirstArgument())
+		funcParamTypePtrs = functionType->withBoundFirstArgument()->parameterTypes();
+	vector<Type const*> inputStateParams;
+	for (auto paramType : funcParamTypePtrs)
+		if (paramType->dataStoredIn(DataLocation::Storage))
+			inputStateParams.emplace_back(paramType);
+
+	// if input has state param, start the journal
+	if (!inputStateParams.empty())
+	{
+		bool hasParentStateNode = m_parentStateNode.has_value();
+		ASTNode const& parentStateNode = m_parentStateNode->get();
+
+		// reset to parent if we have in a nested assignment
+		if (hasParentStateNode)
+			m_currentStateNode.emplace(parentStateNode);
+		else
+			m_currentStateNode.reset();
+		m_parentStateNode.reset();
+	}
 }
 
 void IRGeneratorForStatements::endVisit(FunctionCallOptions const& _options)
@@ -1745,24 +1806,7 @@ void IRGeneratorForStatements::endVisit(MemberAccess const& _memberAccess)
 			memberFunctionType->kind() == FunctionType::Kind::ArrayPop
 		)
 		{
-			// journal index info if currently we are in a state operation
-			if (m_currentStateNode.has_value())
-			{
-				ArrayType const& arrayType = dynamic_cast<ArrayType const&>(*memberFunctionType->selfType());
-
-				bool isValue = arrayType.baseType()->isValueType();
-				Whiskers journalTmpl("<indexJournal>(<base>,<slot>,<key><?isValue>,</isValue><offset>)\n");
-				journalTmpl("indexJournal", m_utils.storageIndexJournalFunction(*arrayType.baseType()));
-				journalTmpl("base", IRVariable(_memberAccess.expression()).part("slot").name());
-				journalTmpl("slot", IRVariable(_memberAccess).part("self").name());
-				if (memberFunctionType->kind() == FunctionType::Kind::ArrayPush)
-					journalTmpl("key", m_utils.arrayLengthFunction(arrayType));
-				else
-					journalTmpl("key", "sub(" + m_utils.arrayLengthFunction(arrayType) + ", 1)");
-				journalTmpl("isValue", isValue);
-//				journalTmpl("offset", isValue ? offset : "");
-				appendCode() << journalTmpl.render();
-			}
+			// do nothing
 		}
 		else
 		{
@@ -3562,6 +3606,17 @@ bool IRGeneratorForStatements::inCurrentStateOperation(Expression const& _expres
 		{
 			auto currentStateIdentifiers = getStateIdentifiersFromExpression(_expression);
 			auto cachedStateIdentifiers = getStateIdentifiersFromExpression(assignment->leftHandSide());
+
+			if (!currentStateIdentifiers.empty() && !cachedStateIdentifiers.empty())
+				// check if currentStateIdentifier[0] in cachedStateIdentifiers
+				inCurrentStateOperation = std::find_if(cachedStateIdentifiers.begin(), cachedStateIdentifiers.end(), [&](auto cachedIdentifier) {
+														   return cachedIdentifier->id() == currentStateIdentifiers[0]->id();
+													   }) != cachedStateIdentifiers.end();
+		}
+		else if (auto functionCall = dynamic_cast<FunctionCall const*>(&m_currentStateNode->get()))
+		{
+			auto currentStateIdentifiers = getStateIdentifiersFromExpression(_expression);
+			auto cachedStateIdentifiers = getStateIdentifiersFromExpression(functionCall->expression());
 
 			if (!currentStateIdentifiers.empty() && !cachedStateIdentifiers.empty())
 				// check if currentStateIdentifier[0] in cachedStateIdentifiers

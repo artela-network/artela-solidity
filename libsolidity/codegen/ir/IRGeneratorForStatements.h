@@ -120,6 +120,7 @@ public:
 	void endVisit(Return const& _return) override;
 	bool visit(UnaryOperation const& _unaryOperation) override;
 	bool visit(BinaryOperation const& _binOp) override;
+	bool visit(FunctionCall const& _functionCall) override;
 	void endVisit(FunctionCall const& _funCall) override;
 	void endVisit(FunctionCallOptions const& _funCallOptions) override;
 	bool visit(MemberAccess const& _memberAccess) override;
@@ -257,6 +258,7 @@ private:
 	YulUtilFunctions& m_utils;
 	std::optional<IRLValue> m_currentLValue;
 	std::optional<std::reference_wrapper<ASTNode const>> m_currentStateNode;
+	std::optional<std::reference_wrapper<ASTNode const>> m_parentStateNode;
 };
 
 }
