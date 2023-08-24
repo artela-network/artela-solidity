@@ -2405,7 +2405,7 @@ string YulUtilFunctions::storageArrayIndexAccessFunction(ArrayType const& _type)
 string YulUtilFunctions::storageIndexJournalFunction(Type const& _type)
 {
 	bool isValue = _type.isValueType();
-	string functionName = string(isValue ?  "value" : "reference") + "_storage_journal";
+	string functionName = string(isValue ?  "value" : "reference") + "_storage_index_journal";
 	return m_functionCollector.createFunction(functionName, [&]() {
 		return Whiskers(R"(
 			function <functionName>(base, slot, key<?isValue>, offset</isValue>) {
@@ -2422,17 +2422,17 @@ string YulUtilFunctions::storageIndexJournalFunction(Type const& _type)
 	});
 }
 
-string YulUtilFunctions::storageVarJournalFunction(Type const& _type)
+string YulUtilFunctions::stateVarJournalFunction(Type const& _type)
 {
 	bool isValue = _type.isValueType();
-	string functionName = string(isValue ?  "value" : "reference") + "_storage_journal";
+	string functionName = string(isValue ?  "value" : "reference") + "_state_var_journal";
 	return m_functionCollector.createFunction(functionName, [&]() {
 		return Whiskers(R"(
-			function <functionName>(base, slot, key<?isValue>, offset</isValue>) {
+			function <functionName>(stateVar, slot<?isValue>, offset</isValue>) {
 				<?isValue>
-				ivjournal(base, slot, key, offset)
+				vsvjournal(stateVar, slot, offset)
 				<!isValue>
-				irjournal(base, slot, key)
+				rsvjournal(stateVar, slot)
 				</isValue>
 			}
 		)")

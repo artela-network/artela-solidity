@@ -288,7 +288,7 @@ public:
 	/// signature: (array, index)
 	std::string storageIndexJournalFunction(Type const& _type);
 
-	std::string storageVarJournalFunction(Type const& _type);
+	std::string stateVarJournalFunction(Type const& _type);
 
 	/// @returns the name of a function that returns the memory address for the
 	/// given array base ref and index.
