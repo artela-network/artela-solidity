@@ -3722,6 +3722,11 @@ bool IRGeneratorForStatements::inCurrentStateOperation(Expression const& _expres
 			currentStateIdentifiers = getStateIdentifiersFromExpression(_expression);
 			cachedStateIdentifiers = getStateIdentifiersFromExpression(*varDeclStatement->initialValue());
 		}
+		else if (auto returnStatement = dynamic_cast<Return const*>(&m_currentStateNode->get()))
+		{
+			currentStateIdentifiers = getStateIdentifiersFromExpression(_expression);
+			cachedStateIdentifiers = getStateIdentifiersFromExpression(*returnStatement->expression());
+		}
 
 		if (!currentStateIdentifiers.empty() && !cachedStateIdentifiers.empty())
 			// check if currentStateIdentifier[0] in cachedStateIdentifiers
