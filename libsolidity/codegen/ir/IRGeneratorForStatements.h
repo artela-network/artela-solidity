@@ -257,13 +257,13 @@ private:
 	static bool isStateIdentifier(Identifier const* _identifier);
 	void setCurrentStateNode(ASTNode const& astNode);
 	void resetCurrentStateNode(ASTNode const& astNode);
+	void cacheAndClearCurrentStateNode(ASTNode const& astNode);
 
 	std::function<std::string()> m_placeholderCallback;
 	YulUtilFunctions& m_utils;
 	std::optional<IRLValue> m_currentLValue;
 	std::optional<std::reference_wrapper<ASTNode const>> m_currentStateNode;
 	std::map<int64_t, std::reference_wrapper<ASTNode const>> m_parentStateNodes;
-	std::set<int64_t> m_stateOperations;
 };
 
 }

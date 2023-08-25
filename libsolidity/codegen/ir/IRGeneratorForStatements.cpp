@@ -400,6 +400,8 @@ bool IRGeneratorForStatements::visit(VariableDeclarationStatement const& _varDec
 		// if input has state param, start the journal
 		if (stateDecl)
 			setCurrentStateNode(_varDeclStatement);
+		else
+			cacheAndClearCurrentStateNode(_varDeclStatement);
 	}
 
 	return true;
@@ -411,7 +413,6 @@ void IRGeneratorForStatements::endVisit(VariableDeclarationStatement const& _var
 
 	if (Expression const* expression = _varDeclStatement.initialValue())
 	{
-		bool stateDecl = false;
 		if (_varDeclStatement.declarations().size() > 1)
 		{
 			auto const* tupleType = dynamic_cast<TupleType const*>(expression->annotation().type);
@@ -421,23 +422,16 @@ void IRGeneratorForStatements::endVisit(VariableDeclarationStatement const& _var
 				if (auto const& decl = _varDeclStatement.declarations()[i])
 				{
 					solAssert(tupleType->components()[i]);
-					if (decl->type()->dataStoredIn(DataLocation::Storage) && !*expression->annotation().isConstant)
-						stateDecl = true;
-
 					define(m_context.addLocalVariable(*decl), IRVariable(*expression).tupleComponent(i));
 				}
 		}
 		else
 		{
 			VariableDeclaration const& varDecl = *_varDeclStatement.declarations().front();
-			if (varDecl.type()->dataStoredIn(DataLocation::Storage) && !*expression->annotation().isConstant)
-				stateDecl = true;
-
 			define(m_context.addLocalVariable(varDecl), *expression);
 		}
 
-		if (stateDecl)
-			resetCurrentStateNode(_varDeclStatement);
+		resetCurrentStateNode(_varDeclStatement);
 	}
 	else
 		for (auto const& decl: _varDeclStatement.declarations())
@@ -499,6 +493,8 @@ bool IRGeneratorForStatements::visit(Assignment const& _assignment)
 	auto stateIdentifiers = getStateIdentifiersFromExpression(_assignment.leftHandSide());
 	if (!stateIdentifiers.empty())
 		setCurrentStateNode(_assignment);
+	else
+		cacheAndClearCurrentStateNode(_assignment);
 
 	_assignment.leftHandSide().accept(*this);
 
@@ -717,6 +713,8 @@ bool IRGeneratorForStatements::visit(Return const& _return)
 
 	if (returnedStateVar)
 		setCurrentStateNode(_return);
+	else
+		cacheAndClearCurrentStateNode(_return);
 
 	return true;
 }
@@ -729,18 +727,13 @@ void IRGeneratorForStatements::endVisit(Return const& _return)
 		solAssert(_return.annotation().functionReturnParameters, "Invalid return parameters pointer.");
 		vector<ASTPointer<VariableDeclaration>> const& returnParameters =
 			_return.annotation().functionReturnParameters->parameters();
-		bool returnedStateVar = false;
-		for (size_t i = 0; i < returnParameters.size(); ++i)
-			if (returnParameters[i]->type()->dataStoredIn(DataLocation::Storage) && !returnParameters[i]->isConstant())
-				returnedStateVar = true;
 		if (returnParameters.size() > 1)
 			for (size_t i = 0; i < returnParameters.size(); ++i)
 				assign(m_context.localVariable(*returnParameters[i]), IRVariable(*value).tupleComponent(i));
 		else if (returnParameters.size() == 1)
 			assign(m_context.localVariable(*returnParameters.front()), *value);
 
-		if (returnedStateVar)
-			resetCurrentStateNode(_return);
+		resetCurrentStateNode(_return);
 	}
 	appendCode() << "leave\n";
 }
@@ -1038,6 +1031,8 @@ bool IRGeneratorForStatements::visit(FunctionCall const& _functionCall)
 		 functionType->stateMutability() != StateMutability::Pure &&
 		 functionType->stateMutability() != StateMutability::View))
 		setCurrentStateNode(_functionCall);
+	else
+		cacheAndClearCurrentStateNode(_functionCall);
 
 	return true;
 }
@@ -3679,7 +3674,6 @@ bool IRGeneratorForStatements::inCurrentStateOperation(Expression const& _expres
 
 void IRGeneratorForStatements::setCurrentStateNode(ASTNode const& astNode)
 {
-	m_stateOperations.emplace(astNode.id());
 	bool hasParentStateNode = m_currentStateNode.has_value();
 	if (hasParentStateNode)
 		m_parentStateNodes.emplace(astNode.id(), std::cref(m_currentStateNode->get()));
@@ -3687,13 +3681,19 @@ void IRGeneratorForStatements::setCurrentStateNode(ASTNode const& astNode)
 	m_currentStateNode.emplace(astNode);
 }
 
+void IRGeneratorForStatements::cacheAndClearCurrentStateNode(ASTNode const& astNode)
+{
+	bool hasParentStateNode = m_currentStateNode.has_value();
+	if (hasParentStateNode)
+		m_parentStateNodes.emplace(astNode.id(), std::cref(m_currentStateNode->get()));
+
+	m_currentStateNode.reset();
+}
+
 void IRGeneratorForStatements::resetCurrentStateNode(ASTNode const& astNode)
 {
-	if (m_stateOperations.find(astNode.id()) != m_stateOperations.end())
-	{
-		if (m_parentStateNodes.find(astNode.id()) != m_parentStateNodes.end())
-			m_currentStateNode.emplace(m_parentStateNodes.find(astNode.id())->second);
-		else
-			m_currentStateNode.reset();
-	}
+	if (m_parentStateNodes.find(astNode.id()) != m_parentStateNodes.end())
+		m_currentStateNode.emplace(m_parentStateNodes.find(astNode.id())->second);
+	else
+		m_currentStateNode.reset();
 }
