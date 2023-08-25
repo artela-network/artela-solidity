@@ -254,13 +254,16 @@ private:
 																			  std::reference_wrapper<VariableDeclarationStatement const>
 																			  > const& _expOrStat);
 	static std::vector<Identifier const*> getStateIdentifiersFromExpression(Expression const& expression);
-	static bool isStateIdentifier(Identifier const* _identifier) ;
+	static bool isStateIdentifier(Identifier const* _identifier);
+	void setCurrentStateNode(ASTNode const& astNode);
+	void resetCurrentStateNode(ASTNode const& astNode);
 
 	std::function<std::string()> m_placeholderCallback;
 	YulUtilFunctions& m_utils;
 	std::optional<IRLValue> m_currentLValue;
 	std::optional<std::reference_wrapper<ASTNode const>> m_currentStateNode;
-	std::optional<std::reference_wrapper<ASTNode const>> m_parentStateNode;
+	std::map<int64_t, std::reference_wrapper<ASTNode const>> m_parentStateNodes;
+	std::set<int64_t> m_stateOperations;
 };
 
 }

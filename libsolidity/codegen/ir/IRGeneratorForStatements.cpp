@@ -399,14 +399,7 @@ bool IRGeneratorForStatements::visit(VariableDeclarationStatement const& _varDec
 
 		// if input has state param, start the journal
 		if (stateDecl)
-		{
-			m_parentStateNode.reset();
-			bool hasParentStateNode = m_currentStateNode.has_value();
-			if (hasParentStateNode)
-				m_parentStateNode.emplace(m_currentStateNode->get());
-
-			m_currentStateNode.emplace(_varDeclStatement);
-		}
+			setCurrentStateNode(_varDeclStatement);
 	}
 
 	return true;
@@ -444,17 +437,7 @@ void IRGeneratorForStatements::endVisit(VariableDeclarationStatement const& _var
 		}
 
 		if (stateDecl)
-		{
-			bool hasParentStateNode = m_parentStateNode.has_value();
-			ASTNode const& parentStateNode = m_parentStateNode->get();
-
-			// reset to parent if we have in a nested assignment
-			if (hasParentStateNode)
-				m_currentStateNode.emplace(parentStateNode);
-			else
-				m_currentStateNode.reset();
-			m_parentStateNode.reset();
-		}
+			resetCurrentStateNode(_varDeclStatement);
 	}
 	else
 		for (auto const& decl: _varDeclStatement.declarations())
@@ -513,13 +496,9 @@ bool IRGeneratorForStatements::visit(Assignment const& _assignment)
 		_assignment.rightHandSide();
 
 	// set current state expression
-	bool hasParentStateNode = m_currentStateNode.has_value();
-	ASTNode const& parentStateNode = m_currentStateNode->get();
 	auto stateIdentifiers = getStateIdentifiersFromExpression(_assignment.leftHandSide());
 	if (!stateIdentifiers.empty())
-		m_currentStateNode.emplace(_assignment);
-	else
-		m_currentStateNode.reset();
+		setCurrentStateNode(_assignment);
 
 	_assignment.leftHandSide().accept(*this);
 
@@ -554,10 +533,7 @@ bool IRGeneratorForStatements::visit(Assignment const& _assignment)
 	}
 
 	// reset to parent if we have in a nested assignment
-	if (hasParentStateNode)
-		m_currentStateNode.emplace(parentStateNode);
-	else
-	    m_currentStateNode.reset();
+	resetCurrentStateNode(_assignment);
 	m_currentLValue.reset();
 	return false;
 }
@@ -740,14 +716,7 @@ bool IRGeneratorForStatements::visit(Return const& _return)
 	}
 
 	if (returnedStateVar)
-	{
-		m_parentStateNode.reset();
-		bool hasParentStateNode = m_currentStateNode.has_value();
-		if (hasParentStateNode)
-			m_parentStateNode.emplace(m_currentStateNode->get());
-
-		m_currentStateNode.emplace(_return);
-	}
+		setCurrentStateNode(_return);
 
 	return true;
 }
@@ -771,17 +740,7 @@ void IRGeneratorForStatements::endVisit(Return const& _return)
 			assign(m_context.localVariable(*returnParameters.front()), *value);
 
 		if (returnedStateVar)
-		{
-			bool hasParentStateNode = m_parentStateNode.has_value();
-			ASTNode const& parentStateNode = m_parentStateNode->get();
-
-			// reset to parent if we have in a nested assignment
-			if (hasParentStateNode)
-				m_currentStateNode.emplace(parentStateNode);
-			else
-				m_currentStateNode.reset();
-			m_parentStateNode.reset();
-		}
+			resetCurrentStateNode(_return);
 	}
 	appendCode() << "leave\n";
 }
@@ -1063,26 +1022,20 @@ bool IRGeneratorForStatements::visit(FunctionCall const& _functionCall)
 		functionType = dynamic_cast<FunctionType const*>(_functionCall.expression().annotation().type);
 
 	// check if there is any input state params
-	auto funcParamTypePtrs = functionType->parameterTypesIncludingSelf();
 	vector<Type const*> inputStateParams;
-	for (auto paramType : funcParamTypePtrs)
+	for (auto paramType : functionType->parameterTypesIncludingSelf())
 		if (paramType->dataStoredIn(DataLocation::Storage))
 			inputStateParams.emplace_back(paramType);
 
-	// if input has state param, start the journal
-	m_parentStateNode.reset();
-	bool hasParentStateNode = m_currentStateNode.has_value();
-	if (hasParentStateNode)
-		m_parentStateNode.emplace(m_currentStateNode->get());
+	vector<Type const*> outputStateParams;
+	for (auto returnType : functionType->returnParameterTypes())
+		if (returnType->dataStoredIn(DataLocation::Storage))
+			outputStateParams.emplace_back(returnType);
 
-	if (!inputStateParams.empty())
-	{
-		auto stateIdentifiers = getStateIdentifiersFromExpression(_functionCall.expression());
-		if (!stateIdentifiers.empty())
-			m_currentStateNode.emplace(_functionCall);
-		else
-			m_currentStateNode.reset();
-	}
+	// if input has state param, start the journal
+	if (!inputStateParams.empty() &&
+		(!outputStateParams.empty() || functionType->stateMutability() != StateMutability::Pure))
+		setCurrentStateNode(_functionCall);
 
 	return true;
 }
@@ -1821,28 +1774,8 @@ void IRGeneratorForStatements::endVisit(FunctionCall const& _functionCall)
 		solUnimplemented("FunctionKind " + toString(static_cast<int>(functionType->kind())) + " not yet implemented");
 	}
 
-	// check if there is any input state params
-	auto funcParamTypePtrs = functionType->parameterTypes();
-	if (functionType->hasBoundFirstArgument())
-		funcParamTypePtrs = functionType->withBoundFirstArgument()->parameterTypes();
-	vector<Type const*> inputStateParams;
-	for (auto paramType : funcParamTypePtrs)
-		if (paramType->dataStoredIn(DataLocation::Storage))
-			inputStateParams.emplace_back(paramType);
-
-	// if input has state param, start the journal
-	if (!inputStateParams.empty())
-	{
-		bool hasParentStateNode = m_parentStateNode.has_value();
-		ASTNode const& parentStateNode = m_parentStateNode->get();
-
-		// reset to parent if we have in a nested assignment
-		if (hasParentStateNode)
-			m_currentStateNode.emplace(parentStateNode);
-		else
-			m_currentStateNode.reset();
-		m_parentStateNode.reset();
-	}
+	// reset the state AST node cache
+	resetCurrentStateNode(_functionCall);
 }
 
 void IRGeneratorForStatements::endVisit(FunctionCallOptions const& _options)
@@ -3715,7 +3648,11 @@ bool IRGeneratorForStatements::inCurrentStateOperation(Expression const& _expres
 		else if (auto functionCall = dynamic_cast<FunctionCall const*>(&m_currentStateNode->get()))
 		{
 			currentStateIdentifiers = getStateIdentifiersFromExpression(_expression);
-			cachedStateIdentifiers = getStateIdentifiersFromExpression(functionCall->expression());
+			for (auto arg : functionCall->arguments())
+			{
+				auto argStateIdentifiers = getStateIdentifiersFromExpression(*arg);
+				cachedStateIdentifiers.insert(cachedStateIdentifiers.end(), argStateIdentifiers.begin(), argStateIdentifiers.end());
+			}
 		}
 		else if (auto varDeclStatement = dynamic_cast<VariableDeclarationStatement const*>(&m_currentStateNode->get()))
 		{
@@ -3736,4 +3673,25 @@ bool IRGeneratorForStatements::inCurrentStateOperation(Expression const& _expres
 	}
 
 	return inCurrentStateOperation;
+}
+
+void IRGeneratorForStatements::setCurrentStateNode(ASTNode const& astNode)
+{
+	m_stateOperations.emplace(astNode.id());
+	bool hasParentStateNode = m_currentStateNode.has_value();
+	if (hasParentStateNode)
+		m_parentStateNodes.emplace(astNode.id(), std::cref(m_currentStateNode->get()));
+
+	m_currentStateNode.emplace(astNode);
+}
+
+void IRGeneratorForStatements::resetCurrentStateNode(ASTNode const& astNode)
+{
+	if (m_stateOperations.find(astNode.id()) != m_stateOperations.end())
+	{
+		if (m_parentStateNodes.find(astNode.id()) != m_parentStateNodes.end())
+			m_currentStateNode.emplace(m_parentStateNodes.find(astNode.id())->second);
+		else
+			m_currentStateNode.reset();
+	}
 }
