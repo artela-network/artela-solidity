@@ -1033,8 +1033,10 @@ bool IRGeneratorForStatements::visit(FunctionCall const& _functionCall)
 			outputStateParams.emplace_back(returnType);
 
 	// if input has state param, start the journal
-	if (!inputStateParams.empty() &&
-		(!outputStateParams.empty() || functionType->stateMutability() != StateMutability::Pure))
+	if (!outputStateParams.empty() ||
+		(!inputStateParams.empty() &&
+		 functionType->stateMutability() != StateMutability::Pure &&
+		 functionType->stateMutability() != StateMutability::View))
 		setCurrentStateNode(_functionCall);
 
 	return true;
