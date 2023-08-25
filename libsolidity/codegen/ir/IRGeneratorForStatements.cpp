@@ -1005,6 +1005,9 @@ bool IRGeneratorForStatements::visit(FunctionCall const& _functionCall)
 {
 	FunctionTypePointer functionType = nullptr;
 	auto functionCallKind = *_functionCall.annotation().kind;
+	if (functionCallKind == FunctionCallKind::TypeConversion)
+		return true;
+
 	if (functionCallKind == FunctionCallKind::StructConstructorCall)
 	{
 		auto const& type = dynamic_cast<TypeType const&>(*_functionCall.expression().annotation().type);
