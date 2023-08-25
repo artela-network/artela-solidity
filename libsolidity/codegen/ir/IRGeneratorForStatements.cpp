@@ -371,10 +371,9 @@ string IRGeneratorForStatements::constantValueFunction(VariableDeclaration const
 	}
 }
 
-void IRGeneratorForStatements::endVisit(VariableDeclarationStatement const& _varDeclStatement)
+bool IRGeneratorForStatements::visit(VariableDeclarationStatement const& _varDeclStatement)
 {
-	setLocation(_varDeclStatement);
-
+	bool stateDecl = false;
 	if (Expression const* expression = _varDeclStatement.initialValue())
 	{
 		if (_varDeclStatement.declarations().size() > 1)
@@ -386,13 +385,75 @@ void IRGeneratorForStatements::endVisit(VariableDeclarationStatement const& _var
 				if (auto const& decl = _varDeclStatement.declarations()[i])
 				{
 					solAssert(tupleType->components()[i]);
+					if (decl->type()->dataStoredIn(DataLocation::Storage) && !*expression->annotation().isConstant)
+						stateDecl = true;
+				}
+		}
+		else
+		{
+			VariableDeclaration const& varDecl = *_varDeclStatement.declarations().front();
+			if (varDecl.type()->dataStoredIn(DataLocation::Storage) && !*expression->annotation().isConstant)
+				stateDecl = true;
+		}
+
+
+		// if input has state param, start the journal
+		if (stateDecl)
+		{
+			m_parentStateNode.reset();
+			bool hasParentStateNode = m_currentStateNode.has_value();
+			if (hasParentStateNode)
+				m_parentStateNode.emplace(m_currentStateNode->get());
+
+			m_currentStateNode.emplace(_varDeclStatement);
+		}
+	}
+
+	return true;
+}
+
+void IRGeneratorForStatements::endVisit(VariableDeclarationStatement const& _varDeclStatement)
+{
+	setLocation(_varDeclStatement);
+
+	if (Expression const* expression = _varDeclStatement.initialValue())
+	{
+		bool stateDecl = false;
+		if (_varDeclStatement.declarations().size() > 1)
+		{
+			auto const* tupleType = dynamic_cast<TupleType const*>(expression->annotation().type);
+			solAssert(tupleType, "Expected expression of tuple type.");
+			solAssert(_varDeclStatement.declarations().size() == tupleType->components().size(), "Invalid number of tuple components.");
+			for (size_t i = 0; i < _varDeclStatement.declarations().size(); ++i)
+				if (auto const& decl = _varDeclStatement.declarations()[i])
+				{
+					solAssert(tupleType->components()[i]);
+					if (decl->type()->dataStoredIn(DataLocation::Storage) && !*expression->annotation().isConstant)
+						stateDecl = true;
+
 					define(m_context.addLocalVariable(*decl), IRVariable(*expression).tupleComponent(i));
 				}
 		}
 		else
 		{
 			VariableDeclaration const& varDecl = *_varDeclStatement.declarations().front();
+			if (varDecl.type()->dataStoredIn(DataLocation::Storage) && !*expression->annotation().isConstant)
+				stateDecl = true;
+
 			define(m_context.addLocalVariable(varDecl), *expression);
+		}
+
+		if (stateDecl)
+		{
+			bool hasParentStateNode = m_parentStateNode.has_value();
+			ASTNode const& parentStateNode = m_parentStateNode->get();
+
+			// reset to parent if we have in a nested assignment
+			if (hasParentStateNode)
+				m_currentStateNode.emplace(parentStateNode);
+			else
+				m_currentStateNode.reset();
+			m_parentStateNode.reset();
 		}
 	}
 	else
@@ -666,6 +727,31 @@ bool IRGeneratorForStatements::visit(Break const& _break)
 	return false;
 }
 
+bool IRGeneratorForStatements::visit(Return const& _return)
+{
+	bool returnedStateVar = false;
+	if (Expression const* value = _return.expression())
+	{
+		solAssert(_return.annotation().functionReturnParameters, "Invalid return parameters pointer.");
+		vector<ASTPointer<VariableDeclaration>> const& returnParameters = _return.annotation().functionReturnParameters->parameters();
+		for (size_t i = 0; i < returnParameters.size(); ++i)
+			if (returnParameters[i]->type()->dataStoredIn(DataLocation::Storage) && !returnParameters[i]->isConstant())
+				returnedStateVar = true;
+	}
+
+	if (returnedStateVar)
+	{
+		m_parentStateNode.reset();
+		bool hasParentStateNode = m_currentStateNode.has_value();
+		if (hasParentStateNode)
+			m_parentStateNode.emplace(m_currentStateNode->get());
+
+		m_currentStateNode.emplace(_return);
+	}
+
+	return true;
+}
+
 void IRGeneratorForStatements::endVisit(Return const& _return)
 {
 	setLocation(_return);
@@ -674,11 +760,28 @@ void IRGeneratorForStatements::endVisit(Return const& _return)
 		solAssert(_return.annotation().functionReturnParameters, "Invalid return parameters pointer.");
 		vector<ASTPointer<VariableDeclaration>> const& returnParameters =
 			_return.annotation().functionReturnParameters->parameters();
+		bool returnedStateVar = false;
+		for (size_t i = 0; i < returnParameters.size(); ++i)
+			if (returnParameters[i]->type()->dataStoredIn(DataLocation::Storage) && !returnParameters[i]->isConstant())
+				returnedStateVar = true;
 		if (returnParameters.size() > 1)
 			for (size_t i = 0; i < returnParameters.size(); ++i)
 				assign(m_context.localVariable(*returnParameters[i]), IRVariable(*value).tupleComponent(i));
 		else if (returnParameters.size() == 1)
 			assign(m_context.localVariable(*returnParameters.front()), *value);
+
+		if (returnedStateVar)
+		{
+			bool hasParentStateNode = m_parentStateNode.has_value();
+			ASTNode const& parentStateNode = m_parentStateNode->get();
+
+			// reset to parent if we have in a nested assignment
+			if (hasParentStateNode)
+				m_currentStateNode.emplace(parentStateNode);
+			else
+				m_currentStateNode.reset();
+			m_parentStateNode.reset();
+		}
 	}
 	appendCode() << "leave\n";
 }
@@ -3602,28 +3705,29 @@ bool IRGeneratorForStatements::inCurrentStateOperation(Expression const& _expres
 	{
 		// we probably in a nested index access, need to find out
 		// whether current identifier belongs to the cached one
+		vector<Identifier const*> currentStateIdentifiers;
+		vector<Identifier const*> cachedStateIdentifiers;
 		if (auto assignment = dynamic_cast<Assignment const*>(&m_currentStateNode->get()))
 		{
-			auto currentStateIdentifiers = getStateIdentifiersFromExpression(_expression);
-			auto cachedStateIdentifiers = getStateIdentifiersFromExpression(assignment->leftHandSide());
-
-			if (!currentStateIdentifiers.empty() && !cachedStateIdentifiers.empty())
-				// check if currentStateIdentifier[0] in cachedStateIdentifiers
-				inCurrentStateOperation = std::find_if(cachedStateIdentifiers.begin(), cachedStateIdentifiers.end(), [&](auto cachedIdentifier) {
-														   return cachedIdentifier->id() == currentStateIdentifiers[0]->id();
-													   }) != cachedStateIdentifiers.end();
+			currentStateIdentifiers = getStateIdentifiersFromExpression(_expression);
+			cachedStateIdentifiers = getStateIdentifiersFromExpression(assignment->leftHandSide());
 		}
 		else if (auto functionCall = dynamic_cast<FunctionCall const*>(&m_currentStateNode->get()))
 		{
-			auto currentStateIdentifiers = getStateIdentifiersFromExpression(_expression);
-			auto cachedStateIdentifiers = getStateIdentifiersFromExpression(functionCall->expression());
-
-			if (!currentStateIdentifiers.empty() && !cachedStateIdentifiers.empty())
-				// check if currentStateIdentifier[0] in cachedStateIdentifiers
-				inCurrentStateOperation = std::find_if(cachedStateIdentifiers.begin(), cachedStateIdentifiers.end(), [&](auto cachedIdentifier) {
-														   return cachedIdentifier->id() == currentStateIdentifiers[0]->id();
-													   }) != cachedStateIdentifiers.end();
+			currentStateIdentifiers = getStateIdentifiersFromExpression(_expression);
+			cachedStateIdentifiers = getStateIdentifiersFromExpression(functionCall->expression());
 		}
+		else if (auto varDeclStatement = dynamic_cast<VariableDeclarationStatement const*>(&m_currentStateNode->get()))
+		{
+			currentStateIdentifiers = getStateIdentifiersFromExpression(_expression);
+			cachedStateIdentifiers = getStateIdentifiersFromExpression(*varDeclStatement->initialValue());
+		}
+
+		if (!currentStateIdentifiers.empty() && !cachedStateIdentifiers.empty())
+			// check if currentStateIdentifier[0] in cachedStateIdentifiers
+			inCurrentStateOperation = std::find_if(cachedStateIdentifiers.begin(), cachedStateIdentifiers.end(), [&](auto cachedIdentifier) {
+													   return cachedIdentifier->id() == currentStateIdentifiers[0]->id();
+												   }) != cachedStateIdentifiers.end();
 	}
 
 	return inCurrentStateOperation;

@@ -105,6 +105,7 @@ public:
 	/// and also generates the function.
 	std::string constantValueFunction(VariableDeclaration const& _constant);
 
+	bool visit(VariableDeclarationStatement const& _varDeclStatement) override;
 	void endVisit(VariableDeclarationStatement const& _variableDeclaration) override;
 	bool visit(Conditional const& _conditional) override;
 	bool visit(Assignment const& _assignment) override;
@@ -117,6 +118,7 @@ public:
 	bool visit(WhileStatement const& _whileStatement) override;
 	bool visit(Continue const& _continueStatement) override;
 	bool visit(Break const& _breakStatement) override;
+	bool visit(Return const& _return) override;
 	void endVisit(Return const& _return) override;
 	bool visit(UnaryOperation const& _unaryOperation) override;
 	bool visit(BinaryOperation const& _binOp) override;
