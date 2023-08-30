@@ -1807,14 +1807,15 @@ string YulUtilFunctions::clearStorageStructFunction(StructType const& _type)
 				{
 					Whiskers templ(R"(
 						<indexJournal>(slot, add(slot, <slotDiff>), <convertedKey>, <offset>)
-						vvjnal(slot, 0)
+						vvjnal(slot, <offset>, <typeLength>)
 						sstore(add(slot, <slotDiff>), 0)
-						vvjnal(slot, 0)
+						vvjnal(slot, <offset>, <typeLength>)
 					)");
 					templ("indexJournal", storageIndexJournalFunction(*TypeProvider::stringMemory(), *member.type));
 					templ("slotDiff", slotDiff.str());
 					templ("convertedKey", memberNameConversionFunc);
 					templ("offset", toCompactHexWithPrefix(_type.storageOffsetsOfMember(member.name).second));
+					templ("typeLength", toCompactHexWithPrefix(member.type->storageBytes()));
 
 					memberSetValues.emplace_back().emplace("clearMember", templ.render());
 					slotsCleared.emplace(slotDiff);
@@ -2071,25 +2072,28 @@ string YulUtilFunctions::copyValueArrayToStorageFunction(ArrayType const& _fromT
 					<?sameTypeFromStorage>
        					dstSlotValue := <maskFull>(srcSlotValue)
 				 		<updateSrcPtr>
-				 		let elementDstSlot = add(dstSlot, i)
+				 		let elementDstSlot := add(dstSlot, i)
 						<?multipleItemsPerSlotDst>
                         let elemCount := mul(i, <itemsPerSlot>)
 						for { let j := 0 } lt(j, <itemsPerSlot>) { j := add(j, 1) } {
-						    <indexJournal>(dst, elementDstSlot, add(elemCount, j), <srcStride>)
-							vvjnal(elementDstSlot, mul(<srcStride>, j))
+						    <indexJournal>(dst, elementDstSlot, add(elemCount, j), mul(j, <typeLength>))
+							vvjnal(elementDstSlot, mul(<typeLength>, j), <typeLength>)
 						}
                         sstore(elementDstSlot, dstSlotValue)
                         for { let j := 0 } lt(j, <itemsPerSlot>) { j := add(j, 1) } {
-							vvjnal(elementDstSlot, mul(<srcStride>, j))
+							vvjnal(elementDstSlot, mul(<typeLength>, j), <typeLength>)
 						}
                         <!multipleItemsPerSlotDst>
-                        <indexJournal>(dst, elementDstSlot, i)
-						vvjnal(elementDstSlot, 0)
+                        <indexJournal>(dst, elementDstSlot, i, 0)
+						vvjnal(elementDstSlot, 0, 32)
 						sstore(elementDstSlot, dstSlotValue)
-						vvjnal(elementDstSlot, 0)
+						vvjnal(elementDstSlot, 0, 32)
                         </multipleItemsPerSlotDst>
 					<!sameTypeFromStorage>
-						<?multipleItemsPerSlotDst>for { let j := 0 } lt(j, <itemsPerSlot>) { j := add(j, 1) } </multipleItemsPerSlotDst>
+						<?multipleItemsPerSlotDst>
+						let elemCount := mul(i, <itemsPerSlot>)
+						for { let j := 0 } lt(j, <itemsPerSlot>) { j := add(j, 1) }
+						</multipleItemsPerSlotDst>
 						{
 							<?isFromStorage>
 							let <stackItems> := <convert>(
@@ -2101,9 +2105,9 @@ string YulUtilFunctions::copyValueArrayToStorageFunction(ArrayType const& _fromT
 							let itemValue := <prepareStore>(<stackItems>)
 							<?multipleItemsPerSlotDst>
 							let dstStride := <dstStride>
-							<indexJournal>(dst, dstSlot, i, dstStride)
+							<indexJournal>(dst, dstSlot, add(elemCount, j), mul(j, <typeLength>))
 							<!multipleItemsPerSlotDst>
-							<indexJournal>(dst, dstSlot, i)
+							<indexJournal>(dst, dstSlot, i, 0)
 							</multipleItemsPerSlotDst>
 							dstSlotValue :=
 							<?multipleItemsPerSlotDst>
@@ -2114,10 +2118,10 @@ string YulUtilFunctions::copyValueArrayToStorageFunction(ArrayType const& _fromT
 
 							<updateSrcPtr>
 
-							let elementDstSlot = add(dstSlot, i)
-							vvjnal(elementDstSlot, </multipleItemsPerSlotDst> 0 <!multipleItemsPerSlotDst> dstStride </multipleItemsPerSlotDst>)
+							let elementDstSlot := add(dstSlot, i)
+							vvjnal(elementDstSlot, <?multipleItemsPerSlotDst> mul(j, <typeLength>), <typeLength> <!multipleItemsPerSlotDst> 0, 32 </multipleItemsPerSlotDst>)
 							sstore(elementDstSlot, dstSlotValue)
-							vvjnal(elementDstSlot, </multipleItemsPerSlotDst> 0 <!multipleItemsPerSlotDst> dstStride </multipleItemsPerSlotDst>)
+							vvjnal(elementDstSlot, <?multipleItemsPerSlotDst> mul(j, <typeLength>), <typeLength> <!multipleItemsPerSlotDst> 0, 32 </multipleItemsPerSlotDst>)
 						}
 					</sameTypeFromStorage>
 				}
@@ -2132,9 +2136,9 @@ string YulUtilFunctions::copyValueArrayToStorageFunction(ArrayType const& _fromT
 							<updateSrcPtr>
 
 							for { let j := 0 } lt(j, spill) { j := add(j, 1) } {
-                                let offset := mul(<srcStride>, add(j, 1))
+                                let offset := mul(<typeLength>, j)
 								<indexJournal>(dst, storageSlot, j, offset)
-								vvjnal(storageSlot, offset)
+								vvjnal(storageSlot, offset, <typeLength>)
 							}
 						<!sameTypeFromStorage>
 							for { let j := 0 } lt(j, spill) { j := add(j, 1) } {
@@ -2150,17 +2154,17 @@ string YulUtilFunctions::copyValueArrayToStorageFunction(ArrayType const& _fromT
 
 								<updateSrcPtr>
 
-                                let offset := mul(<srcStride>, add(j, 1))
+                                let offset := mul(<typeLength>, j)
 								<indexJournal>(dst, storageSlot, j, offset)
-								vvjnal(storageSlot, offset)
+								vvjnal(storageSlot, offset, <typeLength>)
 							}
 
 						</sameTypeFromStorage>
                         sstore(storageSlot, dstSlotValue)
 
 						for { let j := 0 } lt(j, spill) { j := add(j, 1) } {
-							let offset := mul(<srcStride>, add(j, 1))
-							vvjnal(storageSlot, offset)
+							let offset := mul(<typeLength>, j)
+							vvjnal(storageSlot, offset, <typeLength>)
 						}
 					}
 				</multipleItemsPerSlotDst>
@@ -2186,6 +2190,7 @@ string YulUtilFunctions::copyValueArrayToStorageFunction(ArrayType const& _fromT
 			0,
 			_fromType.baseType()->stackItems().size()
 		));
+		templ("typeLength", toCompactHexWithPrefix(_toType.baseType()->storageBytes()));
 		templ("indexJournal", storageIndexJournalFunction(*TypeProvider::uint256(), *_toType.baseType()));
 		unsigned itemsPerSlot = 32 / _toType.storageStride();
 		templ("itemsPerSlot", to_string(itemsPerSlot));
@@ -2986,9 +2991,9 @@ string YulUtilFunctions::updateStorageValueFunction(
 			return Whiskers(R"(
 				function <functionName>(slot, <offset><fromValues>) {
 					let <toValues> := <convert>(<fromValues>)
-					vvjnal(slot, <journalOffset>)
+					vvjnal(slot, <journalOffset>, <typeLength>)
 					sstore(slot, <update>(sload(slot), <offset><prepare>(<toValues>)))
-					vvjnal(slot, <journalOffset>)
+					vvjnal(slot, <journalOffset>, <typeLength>)
 				}
 
 			)")
@@ -2999,6 +3004,7 @@ string YulUtilFunctions::updateStorageValueFunction(
 					updateByteSliceFunctionDynamic(_toType.storageBytes())
 			)
 			("journalOffset", _offset.has_value() ? "0" : "offset")
+			("typeLength", toCompactHexWithPrefix(_toType.storageBytes()))
 			("offset", _offset.has_value() ? "" : "offset, ")
 			("convert", conversionFunction(_fromType, _toType))
 			("fromValues", suffixedVariableNameList("value_", 0, _fromType.sizeOnStack()))

@@ -327,7 +327,7 @@ static std::map<Instruction, InstructionInfo> const c_instructionInfo =
 	{ Instruction::IVVVJNAL,    { "IVVVJNAL",0, 4, 0, true, Tier::Special } },
     { Instruction::IVVRJNAL,    { "IVVRJNAL",0, 3, 0, true, Tier::Special } },
  	{ Instruction::VRJNAL,      { "VRJNAL",0, 1, 0, true, Tier::Special } },
-	{ Instruction::VVJNAL,      { "VVJNAL",0, 2, 0, true, Tier::Special } },
+	{ Instruction::VVJNAL,      { "VVJNAL",0, 3, 0, true, Tier::Special } },
 	{ Instruction::CREATE,		{ "CREATE",			0, 3, 1, true, Tier::Special } },
 	{ Instruction::CALL,		{ "CALL",			0, 7, 1, true, Tier::Special } },
 	{ Instruction::CALLCODE,	{ "CALLCODE",		0, 7, 1, true, Tier::Special } },
