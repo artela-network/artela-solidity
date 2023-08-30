@@ -286,7 +286,7 @@ public:
 
 	/// @returns the name of a function that journals the given array and index
 	/// signature: (array, index)
-	std::string storageIndexJournalFunction(Type const& _type);
+	std::string storageIndexJournalFunction(Type const& _keyType, Type const& _valueType);
 
 	std::string stateVarJournalFunction(Type const& _type);
 

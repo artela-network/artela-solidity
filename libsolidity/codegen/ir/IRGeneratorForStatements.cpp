@@ -2105,7 +2105,7 @@ void IRGeneratorForStatements::endVisit(MemberAccess const& _memberAccess)
 			{
 				bool isValue = structType.memberType(member)->isValueType();
 				Whiskers journalTmpl("<indexJournal>(<base>,<slot>,<key><?isValue>,</isValue><offset>)\n");
-				journalTmpl("indexJournal", m_utils.storageIndexJournalFunction(*structType.memberType(member)));
+				journalTmpl("indexJournal", m_utils.storageIndexJournalFunction(*TypeProvider::stringMemory(), *structType.memberType(member)));
 				journalTmpl("base",  expression.part("slot").name());
 				journalTmpl("slot", slot);
 				journalTmpl("key", m_utils.conversionFunction(*TypeProvider::stringLiteral(member), *TypeProvider::stringMemory()) + "()");
@@ -2432,7 +2432,7 @@ void IRGeneratorForStatements::endVisit(IndexAccess const& _indexAccess)
 				{
 					bool isValue = arrayType.baseType()->isValueType();
                     Whiskers journalTmpl("<indexJournal>(<base>,<slot>,<key><?isValue>,</isValue><offset>)\n");
-					journalTmpl("indexJournal", m_utils.storageIndexJournalFunction(*arrayType.baseType()));
+					journalTmpl("indexJournal", m_utils.storageIndexJournalFunction(*TypeProvider::uint256(), *arrayType.baseType()));
 					journalTmpl("base", IRVariable(_indexAccess.baseExpression()).part("slot").name());
 					journalTmpl("slot", slot);
 					journalTmpl("key", IRVariable(*_indexAccess.indexExpression()).name());
