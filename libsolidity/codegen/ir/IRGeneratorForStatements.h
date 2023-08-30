@@ -128,8 +128,10 @@ public:
 	bool visit(MemberAccess const& _memberAccess) override;
 	void endVisit(MemberAccess const& _memberAccess) override;
 	bool visit(InlineAssembly const& _inlineAsm) override;
+	bool visit(IndexAccess const& _indexAccess) override;
 	void endVisit(IndexAccess const& _indexAccess) override;
 	void endVisit(IndexRangeAccess const& _indexRangeAccess) override;
+	bool visit(Identifier const& _identifier) override;
 	void endVisit(Identifier const& _identifier) override;
 	bool visit(Literal const& _literal) override;
 
@@ -249,15 +251,11 @@ private:
 	bool inCurrentStateOperation(Expression const& _expression);
 	static ContractDefinition const* getStateVarContract(Identifier const& _identifier);
 	static std::string getStateVarJournalName(Expression const& _expression);
-	static std::vector<Identifier const*> getStateVarIdentifiersFromExpOrStat(std::variant<
-																			  std::reference_wrapper<Assignment const>,
-																			  std::reference_wrapper<VariableDeclarationStatement const>
-																			  > const& _expOrStat);
-	static std::vector<Identifier const*> getStateIdentifiersFromExpression(Expression const& expression);
+	static std::vector<Identifier const*> getStateIdentifiersFromExpression(Expression const& _expression);
 	static bool isStateIdentifier(Identifier const* _identifier);
-	void setCurrentStateNode(ASTNode const& astNode);
-	void resetCurrentStateNode(ASTNode const& astNode);
-	void cacheAndClearCurrentStateNode(ASTNode const& astNode);
+	void setCurrentStateNode(ASTNode const& _astNode);
+	void resetCurrentStateNode(ASTNode const& _astNode);
+	void cacheCurrentStateNode(ASTNode const& _astNode, bool _clearCurrent = false);
 
 	std::function<std::string()> m_placeholderCallback;
 	YulUtilFunctions& m_utils;

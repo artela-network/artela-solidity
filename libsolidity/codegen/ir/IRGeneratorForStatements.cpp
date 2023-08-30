@@ -401,7 +401,7 @@ bool IRGeneratorForStatements::visit(VariableDeclarationStatement const& _varDec
 		if (stateDecl)
 			setCurrentStateNode(_varDeclStatement);
 		else
-			cacheAndClearCurrentStateNode(_varDeclStatement);
+			cacheCurrentStateNode(_varDeclStatement, true);
 	}
 
 	return true;
@@ -494,7 +494,7 @@ bool IRGeneratorForStatements::visit(Assignment const& _assignment)
 	if (!stateIdentifiers.empty())
 		setCurrentStateNode(_assignment);
 	else
-		cacheAndClearCurrentStateNode(_assignment);
+		cacheCurrentStateNode(_assignment, true);
 
 	_assignment.leftHandSide().accept(*this);
 
@@ -714,7 +714,7 @@ bool IRGeneratorForStatements::visit(Return const& _return)
 	if (returnedStateVar)
 		setCurrentStateNode(_return);
 	else
-		cacheAndClearCurrentStateNode(_return);
+		cacheCurrentStateNode(_return, true);
 
 	return true;
 }
@@ -1035,7 +1035,7 @@ bool IRGeneratorForStatements::visit(FunctionCall const& _functionCall)
 		 functionType->stateMutability() != StateMutability::View))
 		setCurrentStateNode(_functionCall);
 	else
-		cacheAndClearCurrentStateNode(_functionCall);
+		cacheCurrentStateNode(_functionCall, true);
 
 	return true;
 }
@@ -1800,6 +1800,15 @@ void IRGeneratorForStatements::endVisit(FunctionCallOptions const& _options)
 
 bool IRGeneratorForStatements::visit(MemberAccess const& _memberAccess)
 {
+	auto stateIdentifiers = getStateIdentifiersFromExpression(_memberAccess);
+	if (!stateIdentifiers.empty())
+	{
+		if (inCurrentStateOperation(*stateIdentifiers[0]))
+			cacheCurrentStateNode(_memberAccess);
+		else
+			cacheCurrentStateNode(_memberAccess, true);
+	}
+
 	// A shortcut for <address>.code.length. We skip visiting <address>.code and directly visit
 	// <address>. The actual code is generated in endVisit.
 	if (
@@ -2336,6 +2345,9 @@ void IRGeneratorForStatements::endVisit(MemberAccess const& _memberAccess)
 	default:
 		solAssert(false, "Member access to unknown type.");
 	}
+
+	// reset the state AST node cache
+	resetCurrentStateNode(_memberAccess);
 }
 
 bool IRGeneratorForStatements::visit(InlineAssembly const& _inlineAsm)
@@ -2354,6 +2366,19 @@ bool IRGeneratorForStatements::visit(InlineAssembly const& _inlineAsm)
 	return false;
 }
 
+bool IRGeneratorForStatements::visit(IndexAccess const& _indexAccess)
+{
+	auto stateIdentifiers = getStateIdentifiersFromExpression(_indexAccess);
+	if (!stateIdentifiers.empty())
+	{
+		if (inCurrentStateOperation(*stateIdentifiers[0]))
+			cacheCurrentStateNode(_indexAccess);
+		else
+			cacheCurrentStateNode(_indexAccess, true);
+	}
+
+	return true;
+}
 
 void IRGeneratorForStatements::endVisit(IndexAccess const& _indexAccess)
 {
@@ -2514,6 +2539,9 @@ void IRGeneratorForStatements::endVisit(IndexAccess const& _indexAccess)
 	}
 	else
 		solAssert(false, "Index access only allowed for mappings or arrays.");
+
+	// reset the state AST node cache
+	resetCurrentStateNode(_indexAccess);
 }
 
 void IRGeneratorForStatements::endVisit(IndexRangeAccess const& _indexRangeAccess)
@@ -2561,6 +2589,19 @@ void IRGeneratorForStatements::endVisit(IndexRangeAccess const& _indexRangeAcces
 		default:
 			solUnimplemented("Index range accesses is implemented only on calldata arrays.");
 	}
+}
+
+bool IRGeneratorForStatements::visit(Identifier const& _identifier)
+{
+	if (isStateIdentifier(&_identifier))
+	{
+			if (inCurrentStateOperation(_identifier))
+				cacheCurrentStateNode(_identifier);
+			else
+				cacheCurrentStateNode(_identifier, true);
+	}
+
+	return true;
 }
 
 void IRGeneratorForStatements::endVisit(Identifier const& _identifier)
@@ -2635,6 +2676,9 @@ void IRGeneratorForStatements::endVisit(Identifier const& _identifier)
 	{
 		solAssert(false, "Identifier type not expected in expression context.");
 	}
+
+	// reset the state AST node cache
+	resetCurrentStateNode(_identifier);
 }
 
 bool IRGeneratorForStatements::visit(Literal const& _literal)
@@ -3590,19 +3634,6 @@ bool IRGeneratorForStatements::isStateIdentifier(Identifier const* _identifier)
 			   || (varDecl && varDecl->isStateVariable()));
 }
 
-vector<Identifier const*> IRGeneratorForStatements::getStateVarIdentifiersFromExpOrStat(variant<
-																			   reference_wrapper<Assignment const>,
-																			   reference_wrapper<VariableDeclarationStatement const>
-																			   > const& _expOrStat)
-{
-	if (holds_alternative<reference_wrapper<Assignment const>>(_expOrStat))
-		return getStateIdentifiersFromExpression(get<reference_wrapper<Assignment const>>(_expOrStat).get().leftHandSide());
-	else if (holds_alternative<reference_wrapper<VariableDeclarationStatement const>>(_expOrStat))
-		return getStateIdentifiersFromExpression(*get<reference_wrapper<VariableDeclarationStatement const>>(_expOrStat).get().initialValue());
-
-	solAssert(false, "not implemented");
-}
-
 vector<Identifier const*> IRGeneratorForStatements::getStateIdentifiersFromExpression(Expression const& _expression)
 {
 	auto* currentExpression = &const_cast<Expression&>(_expression);
@@ -3675,28 +3706,29 @@ bool IRGeneratorForStatements::inCurrentStateOperation(Expression const& _expres
 	return inCurrentStateOperation;
 }
 
-void IRGeneratorForStatements::setCurrentStateNode(ASTNode const& astNode)
+void IRGeneratorForStatements::setCurrentStateNode(ASTNode const& _astNode)
 {
 	bool hasParentStateNode = m_currentStateNode.has_value();
 	if (hasParentStateNode)
-		m_parentStateNodes.emplace(astNode.id(), std::cref(m_currentStateNode->get()));
+		m_parentStateNodes.emplace(_astNode.id(), std::cref(m_currentStateNode->get()));
 
-	m_currentStateNode.emplace(astNode);
+	m_currentStateNode.emplace(_astNode);
 }
 
-void IRGeneratorForStatements::cacheAndClearCurrentStateNode(ASTNode const& astNode)
+void IRGeneratorForStatements::cacheCurrentStateNode(ASTNode const& _astNode, bool _clearCurrent)
 {
 	bool hasParentStateNode = m_currentStateNode.has_value();
 	if (hasParentStateNode)
-		m_parentStateNodes.emplace(astNode.id(), std::cref(m_currentStateNode->get()));
+		m_parentStateNodes.emplace(_astNode.id(), std::cref(m_currentStateNode->get()));
 
-	m_currentStateNode.reset();
+	if (_clearCurrent)
+		m_currentStateNode.reset();
 }
 
-void IRGeneratorForStatements::resetCurrentStateNode(ASTNode const& astNode)
+void IRGeneratorForStatements::resetCurrentStateNode(ASTNode const& _astNode)
 {
-	if (m_parentStateNodes.find(astNode.id()) != m_parentStateNodes.end())
-		m_currentStateNode.emplace(m_parentStateNodes.find(astNode.id())->second);
+	if (m_parentStateNodes.find(_astNode.id()) != m_parentStateNodes.end())
+		m_currentStateNode.emplace(m_parentStateNodes.find(_astNode.id())->second);
 	else
 		m_currentStateNode.reset();
 }
