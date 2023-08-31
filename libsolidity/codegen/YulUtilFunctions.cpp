@@ -1283,6 +1283,12 @@ std::string YulUtilFunctions::resizeArrayFunction(ArrayType const& _type)
 				</isDynamic>
 
 				<?needsClearing>
+					<?isByteArrayOrString><!isByteArrayOrString>
+					for {let i := oldLen} lt(i, newLen) { i := add(i, 1) }
+					{
+						<indexJournal>(array, add(array, <?multiSlots>mul(<slotSize>, i)<!multiSlots>i</multiSlots>), i<?isValue>, <?multiItems>mul(i, <elemSize>)<!multiItems>0</multiItems></isValue>)
+					}
+					</isByteArrayOrString>
 					<cleanUpArrayEnd>(array, oldLen, newLen)
 				</needsClearing>
 			})");
@@ -1294,7 +1300,16 @@ std::string YulUtilFunctions::resizeArrayFunction(ArrayType const& _type)
 			bool isMappingBase = _type.baseType()->category() == Type::Category::Mapping;
 			templ("needsClearing", !isMappingBase);
 			if (!isMappingBase)
+			{
 				templ("cleanUpArrayEnd", cleanUpStorageArrayEndFunction(_type));
+				templ("indexJournal", storageIndexJournalFunction(*TypeProvider::uint256(), *_type.baseType()));
+				templ("isValue", _type.baseType()->isValueType());
+				templ("multiSlots", _type.baseType()->storageSize() > 1);
+				templ("slotSize", toCompactHexWithPrefix(_type.baseType()->storageSize()));
+				templ("multiItems", (32 / _type.baseType()->storageBytes()) > 1);
+				templ("elemSize", toCompactHexWithPrefix(_type.baseType()->storageBytes()));
+				templ("isByteArrayOrString", _type.isByteArrayOrString());
+			}
 			return templ.render();
 	});
 }
@@ -1758,29 +1773,46 @@ string YulUtilFunctions::clearStorageArrayFunction(ArrayType const& _type)
 		solAssert(_type.baseType()->storageSize() <= 1, "Invalid size for value type.");
 
 	string functionName = "clear_storage_array_" + _type.identifier();
+	string clearRange = _type.baseType()->category() != Type::Category::Mapping ?
+					clearStorageRangeFunction((_type.baseType()->storageBytes() < 32) ?
+		  			*TypeProvider::uint256() : *_type.baseType()) : "";
 
 	return m_functionCollector.createFunction(functionName, [&]() {
-		return Whiskers(R"(
+		Whiskers templ(R"(
 			function <functionName>(slot) {
 				<?dynamic>
 					<resizeArray>(slot, 0)
 				<!dynamic>
-					<?+clearRange><clearRange>(slot, add(slot, <lenToSize>(<len>)))</+clearRange>
+					<?+clearRange>
+						<?isByteArrayOrString><!isByteArrayOrString>
+						for {let i := 0} lt(i, <len>) { i := add(i, 1) }
+						{
+							<indexJournal>(slot, add(slot, <?multiSlots>mul(<slotSize>, i)<!multiSlots>i</multiSlots>), i<?isValue>, <?multiItems>mul(i, <elemSize>)<!multiItems>0</multiItems></isValue>)
+						}
+						</isByteArrayOrString>
+						<clearRange>(slot, add(slot, <lenToSize>(<len>)))
+					</+clearRange>
 				</dynamic>
 			}
-		)")
-		("functionName", functionName)
-		("dynamic", _type.isDynamicallySized())
-		("resizeArray", _type.isDynamicallySized() ? resizeArrayFunction(_type) : "")
-		(
-			"clearRange",
-			_type.baseType()->category() != Type::Category::Mapping ?
-			clearStorageRangeFunction((_type.baseType()->storageBytes() < 32) ? *TypeProvider::uint256() : *_type.baseType()) :
-			""
-		)
-		("lenToSize", arrayConvertLengthToSize(_type))
-		("len", _type.length().str())
-		.render();
+		)");
+		templ("functionName", functionName);
+		templ("dynamic", _type.isDynamicallySized());
+		templ("resizeArray", _type.isDynamicallySized() ? resizeArrayFunction(_type) : "");
+		templ("clearRange", clearRange);
+		templ("lenToSize", arrayConvertLengthToSize(_type));
+		templ("len", _type.length().str());
+		if (!clearRange.empty())
+		{
+			templ("indexJournal", storageIndexJournalFunction(*TypeProvider::uint256(), *_type.baseType()));
+			templ("isValue", _type.baseType()->isValueType());
+			templ("multiSlots", _type.baseType()->storageSize() > 1);
+			templ("slotSize", toCompactHexWithPrefix(_type.baseType()->storageSize()));
+			templ("multiItems", (32 / _type.baseType()->storageBytes()) > 1);
+			templ("elemSize", toCompactHexWithPrefix(_type.baseType()->storageBytes()));
+			templ("isByteArrayOrString", _type.isByteArrayOrString());
+		}
+
+	    return templ.render();
 	});
 }
 
@@ -3003,7 +3035,7 @@ string YulUtilFunctions::updateStorageValueFunction(
 					updateByteSliceFunction(_toType.storageBytes(), *_offset) :
 					updateByteSliceFunctionDynamic(_toType.storageBytes())
 			)
-			("journalOffset", _offset.has_value() ? "0" : "offset")
+			("journalOffset", _offset.has_value() ? toCompactHexWithPrefix(*_offset) : "0")
 			("typeLength", toCompactHexWithPrefix(_toType.storageBytes()))
 			("offset", _offset.has_value() ? "" : "offset, ")
 			("convert", conversionFunction(_fromType, _toType))
@@ -4426,12 +4458,15 @@ string YulUtilFunctions::storageSetToZeroFunction(Type const& _type)
 			return Whiskers(R"(
 				function <functionName>(slot, offset) {
 					if iszero(eq(offset, 0)) { <panic>() }
+					<?isByteArrayOrString>vrjnal(slot)</isByteArrayOrString>
 					<clearArray>(slot)
+					<?isByteArrayOrString>vrjnal(slot)</isByteArrayOrString>
 				}
 			)")
 			("functionName", functionName)
 			("clearArray", clearStorageArrayFunction(dynamic_cast<ArrayType const&>(_type)))
 			("panic", panicFunction(PanicCode::Generic))
+			("isByteArrayOrString", dynamic_cast<ArrayType const&>(_type).isByteArrayOrString())
 			.render();
 		else if (_type.category() == Type::Category::Struct)
 			return Whiskers(R"(

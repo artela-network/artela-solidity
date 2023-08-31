@@ -742,6 +742,12 @@ bool IRGeneratorForStatements::visit(UnaryOperation const& _unaryOperation)
 {
 	setLocation(_unaryOperation);
 
+	auto stateIdentifiers = getStateIdentifiersFromExpression(_unaryOperation);
+	if (!stateIdentifiers.empty())
+		setCurrentStateNode(_unaryOperation);
+	else
+		cacheCurrentStateNode(_unaryOperation, true);
+
 	FunctionDefinition const* function = *_unaryOperation.annotation().userDefinedFunction;
 	if (function)
 	{
@@ -861,6 +867,7 @@ bool IRGeneratorForStatements::visit(UnaryOperation const& _unaryOperation)
 	else
 		solUnimplemented("Unary operator not yet implemented");
 
+	resetCurrentStateNode(_unaryOperation);
 	return false;
 }
 
@@ -3658,6 +3665,8 @@ vector<Identifier const*> IRGeneratorForStatements::getStateIdentifiersFromExpre
 		}
 		return res;
 	}
+	else if (auto const* unaryOperation = dynamic_cast<UnaryOperation*>(currentExpression))
+		return getStateIdentifiersFromExpression(unaryOperation->subExpression());
 
 	return {};
 }
@@ -3694,6 +3703,11 @@ bool IRGeneratorForStatements::inCurrentStateOperation(Expression const& _expres
 		{
 			currentStateIdentifiers = getStateIdentifiersFromExpression(_expression);
 			cachedStateIdentifiers = getStateIdentifiersFromExpression(*returnStatement->expression());
+		}
+		else if (auto unaryOperation = dynamic_cast<UnaryOperation const*>(&m_currentStateNode->get()))
+		{
+			currentStateIdentifiers = getStateIdentifiersFromExpression(_expression);
+			cachedStateIdentifiers = getStateIdentifiersFromExpression(unaryOperation->subExpression());
 		}
 
 		if (!currentStateIdentifiers.empty() && !cachedStateIdentifiers.empty())
