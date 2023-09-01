@@ -2120,13 +2120,15 @@ void IRGeneratorForStatements::endVisit(MemberAccess const& _memberAccess)
 			if (m_currentStateNode.has_value())
 			{
 				bool isValue = structType.memberType(member)->isValueType();
-				Whiskers journalTmpl("<indexJournal>(<base>,<slot>,<key><?isValue>,</isValue><offset>)\n");
+				Whiskers journalTmpl("<indexJournal>(<base>,<slot>,<key><?isValue>,</isValue><offset>, <typeId>, <parentTypeId>)\n");
 				journalTmpl("indexJournal", m_utils.storageIndexJournalFunction(*TypeProvider::stringMemory(), *structType.memberType(member)));
 				journalTmpl("base",  expression.part("slot").name());
 				journalTmpl("slot", slot);
 				journalTmpl("key", m_utils.conversionFunction(*TypeProvider::stringLiteral(member), *TypeProvider::stringMemory()) + "()");
 				journalTmpl("isValue", isValue);
 				journalTmpl("offset", isValue ? offsets.first.str() : "");
+				journalTmpl("typeId", structType.memberType(member)->hexId());
+				journalTmpl("parentTypeId", structType.hexId());
 				appendCode() << journalTmpl.render();
 			}
 
@@ -2463,13 +2465,15 @@ void IRGeneratorForStatements::endVisit(IndexAccess const& _indexAccess)
 				if (m_currentStateNode.has_value())
 				{
 					bool isValue = arrayType.baseType()->isValueType();
-                    Whiskers journalTmpl("<indexJournal>(<base>,<slot>,<key><?isValue>,</isValue><offset>)\n");
+                    Whiskers journalTmpl("<indexJournal>(<base>,<slot>,<key><?isValue>,</isValue><offset>, <typeId>, <parentTypeId>)\n");
 					journalTmpl("indexJournal", m_utils.storageIndexJournalFunction(*TypeProvider::uint256(), *arrayType.baseType()));
 					journalTmpl("base", IRVariable(_indexAccess.baseExpression()).part("slot").name());
 					journalTmpl("slot", slot);
 					journalTmpl("key", IRVariable(*_indexAccess.indexExpression()).name());
 					journalTmpl("isValue", isValue);
 					journalTmpl("offset", isValue ? offset : "");
+					journalTmpl("typeId", arrayType.baseType()->hexId());
+					journalTmpl("parentTypeId", arrayType.hexId());
                     appendCode() << journalTmpl.render();
 				}
 
@@ -2600,13 +2604,10 @@ void IRGeneratorForStatements::endVisit(IndexRangeAccess const& _indexRangeAcces
 
 bool IRGeneratorForStatements::visit(Identifier const& _identifier)
 {
-	if (isStateIdentifier(&_identifier))
-	{
-			if (inCurrentStateOperation(_identifier))
-				cacheCurrentStateNode(_identifier);
-			else
-				cacheCurrentStateNode(_identifier, true);
-	}
+	if (isStateIdentifier(&_identifier) && inCurrentStateOperation(_identifier))
+		cacheCurrentStateNode(_identifier);
+	else
+		cacheCurrentStateNode(_identifier, true);
 
 	return true;
 }
@@ -2716,12 +2717,13 @@ void IRGeneratorForStatements::handleVariableReference(
 	if (_variable.isStateVariable() && inCurrentStateOperation(_referencingExpression))
 	{
 		Whiskers templ(R"(
-			<stateVarJournal>(<convertedName>, <slot><?isValue>, <offset></isValue>)
+			<stateVarJournal>(<convertedName>, <slot><?isValue>, <offset></isValue>, <typeId>)
 		)");
 		templ("stateVarJournal", m_utils.stateVarJournalFunction(*_variable.type()));
 		templ("convertedName", m_utils.conversionFunction(*TypeProvider::stringLiteral(getStateVarJournalName(_referencingExpression)), *TypeProvider::stringMemory()) + "()");
 		templ("slot", toCompactHexWithPrefix(m_context.storageLocationOfStateVariable(_variable).first));
 		templ("isValue", _variable.type()->isValueType());
+		templ("typeId", _variable.type()->hexId());
 		templ("offset", toCompactHexWithPrefix(m_context.storageLocationOfStateVariable(_variable).second));
 		appendCode() << templ.render();
 	}
@@ -3693,6 +3695,8 @@ bool IRGeneratorForStatements::inCurrentStateOperation(Expression const& _expres
 				auto argStateIdentifiers = getStateIdentifiersFromExpression(*arg);
 				cachedStateIdentifiers.insert(cachedStateIdentifiers.end(), argStateIdentifiers.begin(), argStateIdentifiers.end());
 			}
+			auto expressionStateIdentifier = getStateIdentifiersFromExpression(functionCall->expression());
+			cachedStateIdentifiers.insert(cachedStateIdentifiers.end(), expressionStateIdentifier.begin(), expressionStateIdentifier.end());
 		}
 		else if (auto varDeclStatement = dynamic_cast<VariableDeclarationStatement const*>(&m_currentStateNode->get()))
 		{

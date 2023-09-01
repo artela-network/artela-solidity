@@ -33,6 +33,7 @@
 #include <libsolutil/CommonIO.h>
 #include <libsolutil/LazyInit.h>
 #include <libsolutil/Result.h>
+#include <libsolutil/Keccak256.h>
 
 #include <boost/rational.hpp>
 
@@ -393,6 +394,12 @@ public:
 
 	/// Clears all internally cached values (if any).
 	virtual void clearCache() const;
+
+	std::string hexId() const
+	{
+		return solidity::util::toHex(solidity::util::keccak256(canonicalName()).asBytes(),
+									 solidity::util::HexPrefix::Add);
+	}
 
 	/// Scans all "using for" directives in the @a _scope for functions implementing
 	/// the operator represented by @a _token. Returns the set of all definitions where the type
