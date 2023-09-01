@@ -397,8 +397,9 @@ public:
 
 	std::string hexId() const
 	{
-		return solidity::util::toHex(solidity::util::keccak256(canonicalName()).asBytes(),
+		auto hex = solidity::util::toHex(solidity::util::keccak256(canonicalName()).asBytes(),
 									 solidity::util::HexPrefix::Add);
+		return hex;
 	}
 
 	/// Scans all "using for" directives in the @a _scope for functions implementing

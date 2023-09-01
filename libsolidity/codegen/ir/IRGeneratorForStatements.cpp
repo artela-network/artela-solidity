@@ -1808,13 +1808,10 @@ void IRGeneratorForStatements::endVisit(FunctionCallOptions const& _options)
 bool IRGeneratorForStatements::visit(MemberAccess const& _memberAccess)
 {
 	auto stateIdentifiers = getStateIdentifiersFromExpression(_memberAccess);
-	if (!stateIdentifiers.empty())
-	{
-		if (inCurrentStateOperation(*stateIdentifiers[0]))
-			cacheCurrentStateNode(_memberAccess);
-		else
-			cacheCurrentStateNode(_memberAccess, true);
-	}
+	if (!stateIdentifiers.empty() && inCurrentStateOperation(*stateIdentifiers[0]))
+		cacheCurrentStateNode(_memberAccess);
+	else
+		cacheCurrentStateNode(_memberAccess, true);
 
 	// A shortcut for <address>.code.length. We skip visiting <address>.code and directly visit
 	// <address>. The actual code is generated in endVisit.
@@ -2378,13 +2375,10 @@ bool IRGeneratorForStatements::visit(InlineAssembly const& _inlineAsm)
 bool IRGeneratorForStatements::visit(IndexAccess const& _indexAccess)
 {
 	auto stateIdentifiers = getStateIdentifiersFromExpression(_indexAccess);
-	if (!stateIdentifiers.empty())
-	{
-		if (inCurrentStateOperation(*stateIdentifiers[0]))
-			cacheCurrentStateNode(_indexAccess);
-		else
-			cacheCurrentStateNode(_indexAccess, true);
-	}
+	if (!stateIdentifiers.empty() && inCurrentStateOperation(*stateIdentifiers[0]))
+		cacheCurrentStateNode(_indexAccess);
+	else
+		cacheCurrentStateNode(_indexAccess, true);
 
 	return true;
 }
