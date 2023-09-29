@@ -177,6 +177,15 @@ enum class Instruction: uint8_t
 	LOG3,				///< Makes a log entry; 3 topics.
 	LOG4,				///< Makes a log entry; 4 topics.
 
+	RSVJNAL = 0xe0,     ///< Journal reference type state variable
+	VSVJNAL,            ///< Journal value type state variable
+	IRVVJNAL,           ///< Journal value type value with reference type index
+	IRVRJNAL,           ///< Journal reference type value with reference type index
+	IVVVJNAL,           ///< Journal value type value with value type index
+	IVVRJNAL,           ///< Journal reference type value with value type index
+	VVJNAL,             ///< Journal reference type state value change
+	VRJNAL,             ///< Journal value type state value change
+
 	CREATE = 0xf0,		///< create a new account with associated code
 	CALL,				///< message-call into an account
 	CALLCODE,			///< message-call with another account's code only

@@ -105,6 +105,7 @@ public:
 	/// and also generates the function.
 	std::string constantValueFunction(VariableDeclaration const& _constant);
 
+	bool visit(VariableDeclarationStatement const& _varDeclStatement) override;
 	void endVisit(VariableDeclarationStatement const& _variableDeclaration) override;
 	bool visit(Conditional const& _conditional) override;
 	bool visit(Assignment const& _assignment) override;
@@ -117,16 +118,20 @@ public:
 	bool visit(WhileStatement const& _whileStatement) override;
 	bool visit(Continue const& _continueStatement) override;
 	bool visit(Break const& _breakStatement) override;
+	bool visit(Return const& _return) override;
 	void endVisit(Return const& _return) override;
 	bool visit(UnaryOperation const& _unaryOperation) override;
 	bool visit(BinaryOperation const& _binOp) override;
+	bool visit(FunctionCall const& _functionCall) override;
 	void endVisit(FunctionCall const& _funCall) override;
 	void endVisit(FunctionCallOptions const& _funCallOptions) override;
 	bool visit(MemberAccess const& _memberAccess) override;
 	void endVisit(MemberAccess const& _memberAccess) override;
 	bool visit(InlineAssembly const& _inlineAsm) override;
+	bool visit(IndexAccess const& _indexAccess) override;
 	void endVisit(IndexAccess const& _indexAccess) override;
 	void endVisit(IndexRangeAccess const& _indexRangeAccess) override;
+	bool visit(Identifier const& _identifier) override;
 	void endVisit(Identifier const& _identifier) override;
 	bool visit(Literal const& _literal) override;
 
@@ -242,9 +247,21 @@ private:
 
 	std::string linkerSymbol(ContractDefinition const& _library) const;
 
+	/// Journal related methods
+	bool inCurrentStateOperation(Expression const& _expression);
+	static ContractDefinition const* getStateVarContract(Identifier const& _identifier);
+	static std::string getStateVarJournalName(Expression const& _expression);
+	static std::vector<Identifier const*> getStateIdentifiersFromExpression(Expression const& _expression);
+	static bool isStateIdentifier(Identifier const* _identifier);
+	void setCurrentStateNode(ASTNode const& _astNode);
+	void resetCurrentStateNode(ASTNode const& _astNode);
+	void cacheCurrentStateNode(ASTNode const& _astNode, bool _clearCurrent = false);
+
 	std::function<std::string()> m_placeholderCallback;
 	YulUtilFunctions& m_utils;
 	std::optional<IRLValue> m_currentLValue;
+	std::optional<std::reference_wrapper<ASTNode const>> m_currentStateNode;
+	std::map<int64_t, std::reference_wrapper<ASTNode const>> m_parentStateNodes;
 };
 
 }

@@ -371,6 +371,42 @@ string IRGeneratorForStatements::constantValueFunction(VariableDeclaration const
 	}
 }
 
+bool IRGeneratorForStatements::visit(VariableDeclarationStatement const& _varDeclStatement)
+{
+	bool stateDecl = false;
+	if (Expression const* expression = _varDeclStatement.initialValue())
+	{
+		if (_varDeclStatement.declarations().size() > 1)
+		{
+			auto const* tupleType = dynamic_cast<TupleType const*>(expression->annotation().type);
+			solAssert(tupleType, "Expected expression of tuple type.");
+			solAssert(_varDeclStatement.declarations().size() == tupleType->components().size(), "Invalid number of tuple components.");
+			for (size_t i = 0; i < _varDeclStatement.declarations().size(); ++i)
+				if (auto const& decl = _varDeclStatement.declarations()[i])
+				{
+					solAssert(tupleType->components()[i]);
+					if (decl->type()->dataStoredIn(DataLocation::Storage) && !*expression->annotation().isConstant)
+						stateDecl = true;
+				}
+		}
+		else
+		{
+			VariableDeclaration const& varDecl = *_varDeclStatement.declarations().front();
+			if (varDecl.type()->dataStoredIn(DataLocation::Storage) && !*expression->annotation().isConstant)
+				stateDecl = true;
+		}
+
+
+		// if input has state param, start the journal
+		if (stateDecl)
+			setCurrentStateNode(_varDeclStatement);
+		else
+			cacheCurrentStateNode(_varDeclStatement, true);
+	}
+
+	return true;
+}
+
 void IRGeneratorForStatements::endVisit(VariableDeclarationStatement const& _varDeclStatement)
 {
 	setLocation(_varDeclStatement);
@@ -394,6 +430,8 @@ void IRGeneratorForStatements::endVisit(VariableDeclarationStatement const& _var
 			VariableDeclaration const& varDecl = *_varDeclStatement.declarations().front();
 			define(m_context.addLocalVariable(varDecl), *expression);
 		}
+
+		resetCurrentStateNode(_varDeclStatement);
 	}
 	else
 		for (auto const& decl: _varDeclStatement.declarations())
@@ -451,6 +489,13 @@ bool IRGeneratorForStatements::visit(Assignment const& _assignment)
 		) :
 		_assignment.rightHandSide();
 
+	// set current state expression
+	auto stateIdentifiers = getStateIdentifiersFromExpression(_assignment.leftHandSide());
+	if (!stateIdentifiers.empty())
+		setCurrentStateNode(_assignment);
+	else
+		cacheCurrentStateNode(_assignment, true);
+
 	_assignment.leftHandSide().accept(*this);
 
 	solAssert(!!m_currentLValue, "LValue not retrieved.");
@@ -483,6 +528,8 @@ bool IRGeneratorForStatements::visit(Assignment const& _assignment)
 			define(_assignment, value);
 	}
 
+	// reset to parent if we have in a nested assignment
+	resetCurrentStateNode(_assignment);
 	m_currentLValue.reset();
 	return false;
 }
@@ -652,6 +699,26 @@ bool IRGeneratorForStatements::visit(Break const& _break)
 	return false;
 }
 
+bool IRGeneratorForStatements::visit(Return const& _return)
+{
+	bool returnedStateVar = false;
+	if (Expression const* value = _return.expression())
+	{
+		solAssert(_return.annotation().functionReturnParameters, "Invalid return parameters pointer.");
+		vector<ASTPointer<VariableDeclaration>> const& returnParameters = _return.annotation().functionReturnParameters->parameters();
+		for (size_t i = 0; i < returnParameters.size(); ++i)
+			if (returnParameters[i]->type()->dataStoredIn(DataLocation::Storage) && !returnParameters[i]->isConstant())
+				returnedStateVar = true;
+	}
+
+	if (returnedStateVar)
+		setCurrentStateNode(_return);
+	else
+		cacheCurrentStateNode(_return, true);
+
+	return true;
+}
+
 void IRGeneratorForStatements::endVisit(Return const& _return)
 {
 	setLocation(_return);
@@ -665,6 +732,8 @@ void IRGeneratorForStatements::endVisit(Return const& _return)
 				assign(m_context.localVariable(*returnParameters[i]), IRVariable(*value).tupleComponent(i));
 		else if (returnParameters.size() == 1)
 			assign(m_context.localVariable(*returnParameters.front()), *value);
+
+		resetCurrentStateNode(_return);
 	}
 	appendCode() << "leave\n";
 }
@@ -672,6 +741,12 @@ void IRGeneratorForStatements::endVisit(Return const& _return)
 bool IRGeneratorForStatements::visit(UnaryOperation const& _unaryOperation)
 {
 	setLocation(_unaryOperation);
+
+	auto stateIdentifiers = getStateIdentifiersFromExpression(_unaryOperation);
+	if (!stateIdentifiers.empty())
+		setCurrentStateNode(_unaryOperation);
+	else
+		cacheCurrentStateNode(_unaryOperation, true);
 
 	FunctionDefinition const* function = *_unaryOperation.annotation().userDefinedFunction;
 	if (function)
@@ -792,6 +867,7 @@ bool IRGeneratorForStatements::visit(UnaryOperation const& _unaryOperation)
 	else
 		solUnimplemented("Unary operator not yet implemented");
 
+	resetCurrentStateNode(_unaryOperation);
 	return false;
 }
 
@@ -930,6 +1006,45 @@ bool IRGeneratorForStatements::visit(BinaryOperation const& _binOp)
 		define(_binOp) << binaryOperation(_binOp.getOperator(), *commonType, left, right) << "\n";
 	}
 	return false;
+}
+
+bool IRGeneratorForStatements::visit(FunctionCall const& _functionCall)
+{
+	FunctionTypePointer functionType = nullptr;
+	auto functionCallKind = *_functionCall.annotation().kind;
+	if (functionCallKind == FunctionCallKind::TypeConversion)
+		return true;
+
+	if (functionCallKind == FunctionCallKind::StructConstructorCall)
+	{
+		auto const& type = dynamic_cast<TypeType const&>(*_functionCall.expression().annotation().type);
+		auto const& structType = dynamic_cast<StructType const&>(*type.actualType());
+		functionType = structType.constructorType();
+	}
+	else
+		functionType = dynamic_cast<FunctionType const*>(_functionCall.expression().annotation().type);
+
+	// check if there is any input state params
+	vector<Type const*> inputStateParams;
+	for (auto paramType : functionType->parameterTypesIncludingSelf())
+		if (paramType->dataStoredIn(DataLocation::Storage))
+			inputStateParams.emplace_back(paramType);
+
+	vector<Type const*> outputStateParams;
+	for (auto returnType : functionType->returnParameterTypes())
+		if (returnType->dataStoredIn(DataLocation::Storage))
+			outputStateParams.emplace_back(returnType);
+
+	// if input has state param, start the journal
+	if (!outputStateParams.empty() ||
+		(!inputStateParams.empty() &&
+		 functionType->stateMutability() != StateMutability::Pure &&
+		 functionType->stateMutability() != StateMutability::View))
+		setCurrentStateNode(_functionCall);
+	else
+		cacheCurrentStateNode(_functionCall, true);
+
+	return true;
 }
 
 void IRGeneratorForStatements::endVisit(FunctionCall const& _functionCall)
@@ -1665,6 +1780,9 @@ void IRGeneratorForStatements::endVisit(FunctionCall const& _functionCall)
 	default:
 		solUnimplemented("FunctionKind " + toString(static_cast<int>(functionType->kind())) + " not yet implemented");
 	}
+
+	// reset the state AST node cache
+	resetCurrentStateNode(_functionCall);
 }
 
 void IRGeneratorForStatements::endVisit(FunctionCallOptions const& _options)
@@ -1689,6 +1807,12 @@ void IRGeneratorForStatements::endVisit(FunctionCallOptions const& _options)
 
 bool IRGeneratorForStatements::visit(MemberAccess const& _memberAccess)
 {
+	auto stateIdentifiers = getStateIdentifiersFromExpression(_memberAccess);
+	if (!stateIdentifiers.empty() && inCurrentStateOperation(*stateIdentifiers[0]))
+		cacheCurrentStateNode(_memberAccess);
+	else
+		cacheCurrentStateNode(_memberAccess, true);
+
 	// A shortcut for <address>.code.length. We skip visiting <address>.code and directly visit
 	// <address>. The actual code is generated in endVisit.
 	if (
@@ -1731,7 +1855,7 @@ void IRGeneratorForStatements::endVisit(MemberAccess const& _memberAccess)
 			memberFunctionType->kind() == FunctionType::Kind::ArrayPop
 		)
 		{
-			// Nothing to do.
+			// do nothing
 		}
 		else
 		{
@@ -1989,6 +2113,22 @@ void IRGeneratorForStatements::endVisit(MemberAccess const& _memberAccess)
 				type(_memberAccess),
 				IRLValue::Storage{slot, offsets.second}
 			});
+
+			if (m_currentStateNode.has_value())
+			{
+				bool isValue = structType.memberType(member)->isValueType();
+				Whiskers journalTmpl("<indexJournal>(<base>,<slot>,<key><?isValue>,</isValue><offset>, <typeId>, <parentTypeId>)\n");
+				journalTmpl("indexJournal", m_utils.storageIndexJournalFunction(*TypeProvider::stringMemory(), *structType.memberType(member)));
+				journalTmpl("base",  expression.part("slot").name());
+				journalTmpl("slot", slot);
+				journalTmpl("key", m_utils.conversionFunction(*TypeProvider::stringLiteral(member), *TypeProvider::stringMemory()) + "()");
+				journalTmpl("isValue", isValue);
+				journalTmpl("offset", isValue ? offsets.first.str() : "");
+				journalTmpl("typeId", structType.memberType(member)->hexId());
+				journalTmpl("parentTypeId", structType.hexId());
+				appendCode() << journalTmpl.render();
+			}
+
 			break;
 		}
 		case DataLocation::Memory:
@@ -2211,6 +2351,9 @@ void IRGeneratorForStatements::endVisit(MemberAccess const& _memberAccess)
 	default:
 		solAssert(false, "Member access to unknown type.");
 	}
+
+	// reset the state AST node cache
+	resetCurrentStateNode(_memberAccess);
 }
 
 bool IRGeneratorForStatements::visit(InlineAssembly const& _inlineAsm)
@@ -2229,6 +2372,16 @@ bool IRGeneratorForStatements::visit(InlineAssembly const& _inlineAsm)
 	return false;
 }
 
+bool IRGeneratorForStatements::visit(IndexAccess const& _indexAccess)
+{
+	auto stateIdentifiers = getStateIdentifiersFromExpression(_indexAccess);
+	if (!stateIdentifiers.empty() && inCurrentStateOperation(*stateIdentifiers[0]))
+		cacheCurrentStateNode(_indexAccess);
+	else
+		cacheCurrentStateNode(_indexAccess, true);
+
+	return true;
+}
 
 void IRGeneratorForStatements::endVisit(IndexAccess const& _indexAccess)
 {
@@ -2256,6 +2409,17 @@ void IRGeneratorForStatements::endVisit(IndexAccess const& _indexAccess)
 				0u
 			}
 		});
+
+		// journal index info if currently we are in a state operation
+		if (inCurrentStateOperation(_indexAccess))
+		{
+			Whiskers journalTmpl("<indexJournal>(<base>,<slot><?+key>,<key></+key>)\n");
+			journalTmpl("slot", slot);
+			journalTmpl("indexJournal", m_utils.mappingIndexJournalFunction(mappingType, keyType));
+			journalTmpl("base", IRVariable(_indexAccess.baseExpression()).commaSeparatedList());
+			journalTmpl("key", IRVariable(*_indexAccess.indexExpression()).commaSeparatedList());
+			appendCode() << journalTmpl.render();
+		}
 	}
 	else if (baseType.category() == Type::Category::Array || baseType.category() == Type::Category::ArraySlice)
 	{
@@ -2290,6 +2454,22 @@ void IRGeneratorForStatements::endVisit(IndexAccess const& _indexAccess)
 					*_indexAccess.annotation().type,
 					IRLValue::Storage{slot, offset}
 				});
+
+				// journal index info if currently we are in a state operation
+				if (m_currentStateNode.has_value())
+				{
+					bool isValue = arrayType.baseType()->isValueType();
+                    Whiskers journalTmpl("<indexJournal>(<base>,<slot>,<key><?isValue>,</isValue><offset>, <typeId>, <parentTypeId>)\n");
+					journalTmpl("indexJournal", m_utils.storageIndexJournalFunction(*TypeProvider::uint256(), *arrayType.baseType()));
+					journalTmpl("base", IRVariable(_indexAccess.baseExpression()).part("slot").name());
+					journalTmpl("slot", slot);
+					journalTmpl("key", IRVariable(*_indexAccess.indexExpression()).name());
+					journalTmpl("isValue", isValue);
+					journalTmpl("offset", isValue ? offset : "");
+					journalTmpl("typeId", arrayType.baseType()->hexId());
+					journalTmpl("parentTypeId", arrayType.hexId());
+                    appendCode() << journalTmpl.render();
+				}
 
 				break;
 			}
@@ -2364,6 +2544,9 @@ void IRGeneratorForStatements::endVisit(IndexAccess const& _indexAccess)
 	}
 	else
 		solAssert(false, "Index access only allowed for mappings or arrays.");
+
+	// reset the state AST node cache
+	resetCurrentStateNode(_indexAccess);
 }
 
 void IRGeneratorForStatements::endVisit(IndexRangeAccess const& _indexRangeAccess)
@@ -2411,6 +2594,16 @@ void IRGeneratorForStatements::endVisit(IndexRangeAccess const& _indexRangeAcces
 		default:
 			solUnimplemented("Index range accesses is implemented only on calldata arrays.");
 	}
+}
+
+bool IRGeneratorForStatements::visit(Identifier const& _identifier)
+{
+	if (isStateIdentifier(&_identifier) && inCurrentStateOperation(_identifier))
+		cacheCurrentStateNode(_identifier);
+	else
+		cacheCurrentStateNode(_identifier, true);
+
+	return true;
 }
 
 void IRGeneratorForStatements::endVisit(Identifier const& _identifier)
@@ -2485,6 +2678,9 @@ void IRGeneratorForStatements::endVisit(Identifier const& _identifier)
 	{
 		solAssert(false, "Identifier type not expected in expression context.");
 	}
+
+	// reset the state AST node cache
+	resetCurrentStateNode(_identifier);
 }
 
 bool IRGeneratorForStatements::visit(Literal const& _literal)
@@ -2512,6 +2708,19 @@ void IRGeneratorForStatements::handleVariableReference(
 	Expression const& _referencingExpression
 )
 {
+	if (_variable.isStateVariable() && inCurrentStateOperation(_referencingExpression))
+	{
+		Whiskers templ(R"(
+			<stateVarJournal>(<convertedName>, <slot><?isValue>, <offset></isValue>, <typeId>)
+		)");
+		templ("stateVarJournal", m_utils.stateVarJournalFunction(*_variable.type()));
+		templ("convertedName", m_utils.conversionFunction(*TypeProvider::stringLiteral(getStateVarJournalName(_referencingExpression)), *TypeProvider::stringMemory()) + "()");
+		templ("slot", toCompactHexWithPrefix(m_context.storageLocationOfStateVariable(_variable).first));
+		templ("isValue", _variable.type()->isValueType());
+		templ("typeId", _variable.type()->hexId());
+		templ("offset", toCompactHexWithPrefix(m_context.storageLocationOfStateVariable(_variable).second));
+		appendCode() << templ.render();
+	}
 	if ((_variable.isStateVariable() || _variable.isFileLevelVariable()) && _variable.isConstant())
 		define(_referencingExpression) << constantValueFunction(_variable) << "()\n";
 	else if (_variable.isStateVariable() && _variable.immutable())
@@ -2525,6 +2734,7 @@ void IRGeneratorForStatements::handleVariableReference(
 			IRLValue::Stack{m_context.localVariable(_variable)}
 		});
 	else if (m_context.isStateVariable(_variable))
+	{
 		setLValue(_referencingExpression, IRLValue{
 			*_variable.annotation().type,
 			IRLValue::Storage{
@@ -2532,6 +2742,7 @@ void IRGeneratorForStatements::handleVariableReference(
 				m_context.storageLocationOfStateVariable(_variable).second
 			}
 		});
+	}
 	else
 		solAssert(false, "Invalid variable kind.");
 }
@@ -3399,4 +3610,137 @@ string IRGeneratorForStatements::linkerSymbol(ContractDefinition const& _library
 {
 	solAssert(_library.isLibrary());
 	return "linkersymbol(" + util::escapeAndQuoteString(_library.fullyQualifiedName()) + ")";
+}
+
+ContractDefinition const* IRGeneratorForStatements::getStateVarContract(Identifier const& _identifier)
+{
+	auto scope = dynamic_cast<ScopableAnnotation const*>(&_identifier.annotation().referencedDeclaration->annotation());
+	return scope->contract;
+}
+
+string IRGeneratorForStatements::getStateVarJournalName(Expression const& _expression)
+{
+	if (auto identifier = dynamic_cast<Identifier const*>(&_expression))
+	{
+		return getStateVarContract(*identifier)->name() + "." + identifier->name();
+	}
+
+	solUnimplemented("not implemented");
+}
+
+bool IRGeneratorForStatements::isStateIdentifier(Identifier const* _identifier)
+{
+	auto varDecl =
+		dynamic_cast<VariableDeclaration const*>(_identifier->annotation().referencedDeclaration);
+	return _identifier
+		   && (_identifier->annotation().type->dataStoredIn(DataLocation::Storage)
+			   || (varDecl && varDecl->isStateVariable()));
+}
+
+vector<Identifier const*> IRGeneratorForStatements::getStateIdentifiersFromExpression(Expression const& _expression)
+{
+	auto* currentExpression = &const_cast<Expression&>(_expression);
+	if (auto const* indexAccess = dynamic_cast<IndexAccess const*>(currentExpression))
+		return getStateIdentifiersFromExpression(indexAccess->baseExpression());
+	else if (auto const* indexRangeAccess = dynamic_cast<IndexRangeAccess const*>(currentExpression))
+		return getStateIdentifiersFromExpression(indexRangeAccess->baseExpression());
+	else if (auto const* memberAccess = dynamic_cast<MemberAccess const*>(currentExpression))
+		return getStateIdentifiersFromExpression(memberAccess->expression());
+	else if (auto const* identifier = dynamic_cast<Identifier*>(currentExpression))
+	{
+		if (isStateIdentifier(identifier))
+			return {identifier};
+	}
+	else if (auto const* tupleExpression = dynamic_cast<TupleExpression*>(currentExpression))
+	{
+		vector<Identifier const*> res;
+		for (const auto& component : tupleExpression->components())
+		{
+			auto componentIdentifiers = getStateIdentifiersFromExpression(*component);
+			res.insert(res.end(), componentIdentifiers.begin(), componentIdentifiers.end());
+		}
+		return res;
+	}
+	else if (auto const* unaryOperation = dynamic_cast<UnaryOperation*>(currentExpression))
+		return getStateIdentifiersFromExpression(unaryOperation->subExpression());
+
+	return {};
+}
+
+bool IRGeneratorForStatements::inCurrentStateOperation(Expression const& _expression)
+{
+	bool inCurrentStateOperation = false;
+	if (m_currentStateNode.has_value())
+	{
+		// we probably in a nested index access, need to find out
+		// whether current identifier belongs to the cached one
+		vector<Identifier const*> currentStateIdentifiers;
+		vector<Identifier const*> cachedStateIdentifiers;
+		if (auto assignment = dynamic_cast<Assignment const*>(&m_currentStateNode->get()))
+		{
+			currentStateIdentifiers = getStateIdentifiersFromExpression(_expression);
+			cachedStateIdentifiers = getStateIdentifiersFromExpression(assignment->leftHandSide());
+		}
+		else if (auto functionCall = dynamic_cast<FunctionCall const*>(&m_currentStateNode->get()))
+		{
+			currentStateIdentifiers = getStateIdentifiersFromExpression(_expression);
+			for (auto arg : functionCall->arguments())
+			{
+				auto argStateIdentifiers = getStateIdentifiersFromExpression(*arg);
+				cachedStateIdentifiers.insert(cachedStateIdentifiers.end(), argStateIdentifiers.begin(), argStateIdentifiers.end());
+			}
+			auto expressionStateIdentifier = getStateIdentifiersFromExpression(functionCall->expression());
+			cachedStateIdentifiers.insert(cachedStateIdentifiers.end(), expressionStateIdentifier.begin(), expressionStateIdentifier.end());
+		}
+		else if (auto varDeclStatement = dynamic_cast<VariableDeclarationStatement const*>(&m_currentStateNode->get()))
+		{
+			currentStateIdentifiers = getStateIdentifiersFromExpression(_expression);
+			cachedStateIdentifiers = getStateIdentifiersFromExpression(*varDeclStatement->initialValue());
+		}
+		else if (auto returnStatement = dynamic_cast<Return const*>(&m_currentStateNode->get()))
+		{
+			currentStateIdentifiers = getStateIdentifiersFromExpression(_expression);
+			cachedStateIdentifiers = getStateIdentifiersFromExpression(*returnStatement->expression());
+		}
+		else if (auto unaryOperation = dynamic_cast<UnaryOperation const*>(&m_currentStateNode->get()))
+		{
+			currentStateIdentifiers = getStateIdentifiersFromExpression(_expression);
+			cachedStateIdentifiers = getStateIdentifiersFromExpression(unaryOperation->subExpression());
+		}
+
+		if (!currentStateIdentifiers.empty() && !cachedStateIdentifiers.empty())
+			// check if currentStateIdentifier[0] in cachedStateIdentifiers
+			inCurrentStateOperation = std::find_if(cachedStateIdentifiers.begin(), cachedStateIdentifiers.end(), [&](auto cachedIdentifier) {
+													   return cachedIdentifier->id() == currentStateIdentifiers[0]->id();
+												   }) != cachedStateIdentifiers.end();
+	}
+
+	return inCurrentStateOperation;
+}
+
+void IRGeneratorForStatements::setCurrentStateNode(ASTNode const& _astNode)
+{
+	bool hasParentStateNode = m_currentStateNode.has_value();
+	if (hasParentStateNode)
+		m_parentStateNodes.emplace(_astNode.id(), std::cref(m_currentStateNode->get()));
+
+	m_currentStateNode.emplace(_astNode);
+}
+
+void IRGeneratorForStatements::cacheCurrentStateNode(ASTNode const& _astNode, bool _clearCurrent)
+{
+	bool hasParentStateNode = m_currentStateNode.has_value();
+	if (hasParentStateNode)
+		m_parentStateNodes.emplace(_astNode.id(), std::cref(m_currentStateNode->get()));
+
+	if (_clearCurrent)
+		m_currentStateNode.reset();
+}
+
+void IRGeneratorForStatements::resetCurrentStateNode(ASTNode const& _astNode)
+{
+	if (m_parentStateNodes.find(_astNode.id()) != m_parentStateNodes.end())
+		m_currentStateNode.emplace(m_parentStateNodes.find(_astNode.id())->second);
+	else
+		m_currentStateNode.reset();
 }

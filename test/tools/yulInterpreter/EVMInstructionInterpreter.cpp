@@ -446,6 +446,14 @@ u256 EVMInstructionInterpreter::eval(
 	case Instruction::SWAP14:
 	case Instruction::SWAP15:
 	case Instruction::SWAP16:
+	case Instruction::RSVJNAL:
+	case Instruction::VSVJNAL:
+	case Instruction::IRVVJNAL:
+	case Instruction::IRVRJNAL:
+	case Instruction::IVVVJNAL:
+	case Instruction::IVVRJNAL:
+	case Instruction::VVJNAL:
+	case Instruction::VRJNAL:
 	{
 		yulAssert(false, "");
 		return 0;
